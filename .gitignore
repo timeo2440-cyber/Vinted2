@@ -15,6 +15,10 @@ env/
 # Database
 data/*.db
 
+# Runtime files
+bot.log
+bot.pid
+
 # Environment
 .env
 .env.local
