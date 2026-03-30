@@ -1,0 +1,56 @@
+/**
+ * REST API wrapper — all calls go through here.
+ */
+const api = (() => {
+  const BASE = '';
+
+  async function request(method, path, body) {
+    const opts = {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+    };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+
+    const res = await fetch(BASE + path, opts);
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const j = await res.json(); msg = j.detail || j.message || msg; } catch {}
+      throw new Error(msg);
+    }
+    if (res.status === 204) return null;
+    return res.json();
+  }
+
+  return {
+    // Bot control
+    botStart:  () => request('POST', '/api/bot/start'),
+    botStop:   () => request('POST', '/api/bot/stop'),
+    botStatus: () => request('GET',  '/api/bot/status'),
+
+    // Filters
+    getFilters:    ()           => request('GET',    '/api/filters'),
+    createFilter:  (data)       => request('POST',   '/api/filters', data),
+    updateFilter:  (id, data)   => request('PATCH',  `/api/filters/${id}`, data),
+    replaceFilter: (id, data)   => request('PUT',    `/api/filters/${id}`, data),
+    deleteFilter:  (id)         => request('DELETE', `/api/filters/${id}`),
+    testFilter:    (id)         => request('POST',   `/api/filters/${id}/test`),
+
+    // Settings
+    getSettings:    ()     => request('GET', '/api/settings'),
+    saveSettings:   (data) => request('PUT', '/api/settings', data),
+    submitCookies:  (c)    => request('POST', '/api/settings/cookies', { cookies: c }),
+    authStatus:     ()     => request('GET',  '/api/settings/auth-status'),
+
+    // History
+    getPurchases:  (page=1) => request('GET', `/api/history/purchases?page=${page}`),
+    getSeenItems:  (page=1) => request('GET', `/api/history/seen-items?page=${page}`),
+
+    // Stats
+    getStats:    () => request('GET', '/api/stats/summary'),
+    getTimeline: () => request('GET', '/api/stats/timeline'),
+
+    // Logs
+    getLogs:   (page=1) => request('GET', `/api/logs?page=${page}&per_page=200`),
+    clearLogs: ()       => request('DELETE', '/api/logs'),
+  };
+})();

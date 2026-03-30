@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vinted AutoBot</title>
+  <link rel="stylesheet" href="/static/css/main.css" />
+  <link rel="stylesheet" href="/static/css/components.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          <span>Vinted<strong>Bot</strong></span>
+        </div>
+        <div id="ws-indicator" class="ws-dot disconnected" title="WebSocket"></div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="#dashboard" class="nav-link active" data-view="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          Dashboard
+        </a>
+        <a href="#filters" class="nav-link" data-view="filters">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+          Filtres
+          <span id="filter-badge" class="badge hidden">0</span>
+        </a>
+        <a href="#history" class="nav-link" data-view="history">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 0 .5-4.5"/><polyline points="3 3 3 9 9 9"/></svg>
+          Historique
+        </a>
+        <a href="#stats" class="nav-link" data-view="stats">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          Statistiques
+        </a>
+        <a href="#settings" class="nav-link" data-view="settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Paramètres
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div id="auth-status-badge" class="auth-badge offline">
+          <span class="auth-dot"></span>
+          <span id="auth-label">Non connecté</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main id="main">
+      <!-- Top bar -->
+      <header id="topbar">
+        <div class="topbar-left">
+          <h1 id="page-title">Dashboard</h1>
+          <div id="bot-stats-bar" class="stats-bar">
+            <span class="stat-chip"><span id="stat-seen">0</span> vus</span>
+            <span class="stat-chip matched"><span id="stat-matched">0</span> matchés</span>
+            <span class="stat-chip success"><span id="stat-bought">0</span> achetés</span>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <div id="bot-toggle-wrap">
+            <span id="bot-status-label" class="bot-label stopped">Arrêté</span>
+            <label class="toggle-switch" title="Démarrer/Arrêter le bot">
+              <input type="checkbox" id="bot-toggle" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </header>
+
+      <!-- View container -->
+      <div id="view-container">
+        <!-- Dashboard -->
+        <section id="view-dashboard" class="view active">
+          <div class="view-layout">
+            <div class="feed-area">
+              <div class="feed-header">
+                <h2>Flux en direct</h2>
+                <div class="feed-controls">
+                  <label class="mini-toggle">
+                    <input type="checkbox" id="pause-feed" />
+                    <span>Pause</span>
+                  </label>
+                  <button id="clear-feed" class="btn-ghost btn-sm">Vider</button>
+                </div>
+              </div>
+              <div id="item-feed" class="item-feed">
+                <div class="empty-state" id="feed-empty">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                  <p>En attente d'articles...<br/><small>Démarrez le bot et configurez vos filtres.</small></p>
+                </div>
+              </div>
+            </div>
+            <div class="log-panel">
+              <div class="log-header">
+                <h3>Activité</h3>
+                <button id="clear-logs-btn" class="btn-ghost btn-xs">Effacer</button>
+              </div>
+              <div id="activity-log" class="activity-log"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Filters -->
+        <section id="view-filters" class="view">
+          <div class="view-header">
+            <h2>Gestion des filtres</h2>
+            <button id="add-filter-btn" class="btn-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nouveau filtre
+            </button>
+          </div>
+          <div id="filter-list" class="filter-list">
+            <div class="empty-state" id="filters-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+              <p>Aucun filtre configuré.<br/><small>Créez votre premier filtre pour commencer.</small></p>
+            </div>
+          </div>
+        </section>
+
+        <!-- History -->
+        <section id="view-history" class="view">
+          <div class="view-header">
+            <h2>Historique des achats</h2>
+          </div>
+          <div id="history-table-wrap" class="table-wrap">
+            <table id="history-table" class="data-table">
+              <thead>
+                <tr>
+                  <th>Article</th>
+                  <th>Prix</th>
+                  <th>Filtre</th>
+                  <th>Statut</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody id="history-tbody"></tbody>
+            </table>
+            <div class="empty-state" id="history-empty">
+              <p>Aucun achat enregistré.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Stats -->
+        <section id="view-stats" class="view">
+          <div class="view-header"><h2>Statistiques</h2></div>
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
+              <div><div class="stat-value" id="s-total-seen">0</div><div class="stat-label">Articles vus</div></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></div>
+              <div><div class="stat-value" id="s-matched">0</div><div class="stat-label">Matchés</div></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
+              <div><div class="stat-value" id="s-bought">0</div><div class="stat-label">Achetés</div></div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+              <div><div class="stat-value" id="s-spend">0€</div><div class="stat-label">Dépensé (24h)</div></div>
+            </div>
+          </div>
+          <div class="chart-section">
+            <h3>Articles vus (24 dernières heures)</h3>
+            <canvas id="timeline-chart" height="200"></canvas>
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section id="view-settings" class="view">
+          <div class="view-header"><h2>Paramètres</h2></div>
+          <div class="settings-grid">
+            <div class="settings-card">
+              <h3>Authentification Vinted</h3>
+              <p class="help-text">Copiez vos cookies depuis les outils de développement de votre navigateur (onglet Réseau → En-têtes de requête → Cookie).</p>
+              <div id="auth-result" class="auth-result hidden"></div>
+              <textarea id="cookie-input" class="cookie-textarea" placeholder="_vinted_fr_session=...; auth_t=..."></textarea>
+              <div class="form-actions">
+                <button id="validate-cookies-btn" class="btn-primary">Valider les cookies</button>
+                <button id="check-auth-btn" class="btn-ghost">Vérifier le statut</button>
+              </div>
+              <div id="auth-status-detail" class="auth-status-detail"></div>
+            </div>
+
+            <div class="settings-card">
+              <h3>Paramètres du bot</h3>
+              <div class="form-group">
+                <label>Intervalle de polling</label>
+                <div class="slider-row">
+                  <input type="range" id="poll-interval" min="1000" max="15000" step="500" value="4000" />
+                  <span id="poll-interval-label" class="slider-value">4s</span>
+                </div>
+                <small>Fréquence de vérification des nouveaux articles</small>
+              </div>
+              <div class="form-group">
+                <label>Achats max / heure</label>
+                <input type="number" id="max-buy-hour" min="1" max="50" value="5" class="input-field" />
+                <small>Limite de sécurité globale</small>
+              </div>
+              <button id="save-settings-btn" class="btn-primary">Sauvegarder</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <!-- Modal overlay -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div id="modal-box" class="modal-box">
+      <div class="modal-header">
+        <h3 id="modal-title"></h3>
+        <button id="modal-close" class="btn-icon">&times;</button>
+      </div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/static/js/store.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/websocket.js"></script>
+  <script src="/static/js/components/toast.js"></script>
+  <script src="/static/js/components/modal.js"></script>
+  <script src="/static/js/components/item-card.js"></script>
+  <script src="/static/js/components/filter-form.js"></script>
+  <script src="/static/js/components/activity-log.js"></script>
+  <script src="/static/js/views/dashboard.js"></script>
+  <script src="/static/js/views/filters.js"></script>
+  <script src="/static/js/views/history.js"></script>
+  <script src="/static/js/views/stats.js"></script>
+  <script src="/static/js/views/settings.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
