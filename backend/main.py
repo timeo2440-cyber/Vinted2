@@ -97,15 +97,25 @@ async def websocket_endpoint(websocket: WebSocket):
 # Serve frontend static files
 frontend_dir = app_settings.frontend_dir
 if os.path.isdir(frontend_dir):
+    # Mount static FIRST so CSS/JS/assets are served directly without hitting route handlers
     app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
-    @app.get("/")
-    async def serve_frontend():
-        return FileResponse(os.path.join(frontend_dir, "index.html"))
 
-    @app.get("/{path:path}")
-    async def serve_spa(path: str):
-        file_path = os.path.join(frontend_dir, path)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-        return FileResponse(os.path.join(frontend_dir, "index.html"))
+@app.get("/", include_in_schema=False)
+async def serve_index():
+    index = os.path.join(app_settings.frontend_dir, "index.html")
+    if os.path.isfile(index):
+        return FileResponse(index)
+    return {"error": "Frontend not found. Make sure the frontend/ folder exists."}
+
+
+@app.get("/{path:path}", include_in_schema=False)
+async def serve_spa(path: str):
+    # Never intercept API or WS paths
+    if path.startswith("api/") or path.startswith("ws"):
+        from fastapi import HTTPException
+        raise HTTPException(404)
+    file_path = os.path.join(app_settings.frontend_dir, path)
+    if os.path.isfile(file_path):
+        return FileResponse(file_path)
+    return FileResponse(os.path.join(app_settings.frontend_dir, "index.html"))
