@@ -6,7 +6,7 @@
 # ============================================
 
 REPO="https://github.com/timeo2440-cyber/Vinted2.git"
-BRANCH="claude/vinted-autobot-interface-sCXVq"
+BRANCH="main"
 INSTALL_DIR="$HOME/Desktop/VintedBot"
 PORT=8000
 
