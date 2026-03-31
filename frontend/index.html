@@ -61,9 +61,13 @@
             <span class="stat-chip"><span id="stat-seen">0</span> vus</span>
             <span class="stat-chip matched"><span id="stat-matched">0</span> matchés</span>
             <span class="stat-chip success"><span id="stat-bought">0</span> achetés</span>
+            <span class="stat-chip rate"><span id="stat-rate">0</span>/min</span>
           </div>
         </div>
         <div class="topbar-right">
+          <button id="sound-toggle" class="sound-toggle-btn" title="Son désactivé">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+          </button>
           <div id="bot-toggle-wrap">
             <span id="bot-status-label" class="bot-label stopped">Arrêté</span>
             <label class="toggle-switch" title="Démarrer/Arrêter le bot">
@@ -86,6 +90,10 @@
                   <label class="mini-toggle">
                     <input type="checkbox" id="pause-feed" />
                     <span>Pause</span>
+                  </label>
+                  <label class="mini-toggle">
+                    <input type="checkbox" id="matched-only-toggle" />
+                    <span>Matchés</span>
                   </label>
                   <button id="clear-feed" class="btn-ghost btn-sm">Vider</button>
                 </div>

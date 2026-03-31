@@ -52,5 +52,9 @@ const api = (() => {
     // Logs
     getLogs:   (page=1) => request('GET', `/api/logs?page=${page}&per_page=200`),
     clearLogs: ()       => request('DELETE', '/api/logs'),
+
+    // Vinted meta (brands / categories)
+    searchBrands:   (q)  => request('GET', `/api/vinted/brands?q=${encodeURIComponent(q)}`),
+    getCategories:  ()   => request('GET', '/api/vinted/categories'),
   };
 })();

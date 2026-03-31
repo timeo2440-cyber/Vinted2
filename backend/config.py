@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from pathlib import Path
+import os
 
 BASE_DIR = Path(__file__).parent.parent
 
@@ -12,6 +13,8 @@ class Settings(BaseSettings):
     vinted_api_base: str = "https://www.vinted.fr/api/v2"
     default_poll_interval_ms: int = 4000
     default_max_buy_per_hour: int = 5
+    # PORT is set automatically by Railway/Render/Fly.io
+    port: int = int(os.environ.get("PORT", 8000))
 
     class Config:
         env_file = ".env"

@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from sqlalchemy import select, func as sa_func
-from database import AsyncSessionLocal, Purchase, ActivityLog
+from database import AsyncSessionLocal, Purchase, ActivityLog, Setting
 from vinted.client import VintedClient
 from vinted.checkout import full_purchase_flow
 from vinted.exceptions import VintedAuthError
@@ -20,7 +20,7 @@ class BuyEngine:
     async def attempt_buy(self, item: dict, matched_filter) -> None:
         """
         Attempt to auto-buy an item matching a filter.
-        Guards: already bought, session buy, budget cap.
+        Guards: already bought, session buy, per-filter budget cap, global hourly limit.
         """
         item_id = item.get("id", "")
 
@@ -40,10 +40,15 @@ class BuyEngine:
         if not get_attr("auto_buy", False):
             return
 
-        # Guard: budget check
         async with AsyncSessionLocal() as db:
+            # Guard: per-filter daily budget
             if not await self._check_budget(db, filter_id, get_attr("max_budget")):
-                await self._log(db, "warn", f"Budget exceeded for filter '{filter_name}', skipping {item.get('title')}", "buy")
+                await self._log(db, "warn", f"Budget dépassé pour le filtre '{filter_name}', article ignoré: {item.get('title')}", "buy")
+                return
+
+            # Guard: global hourly purchase limit
+            if not await self._check_hourly_global_limit(db):
+                await self._log(db, "warn", f"Limite horaire d'achats atteinte, article ignoré: {item.get('title')}", "buy")
                 return
 
         # Acquire lock — one purchase at a time
@@ -53,7 +58,7 @@ class BuyEngine:
                 return
 
             await self.ws.broadcast_buy_attempt(item_id, filter_id)
-            await self.ws.broadcast_log("info", f"Attempting to buy: {item.get('title')} ({item.get('price')}€)", "buy")
+            await self.ws.broadcast_log("info", f"Tentative d'achat: {item.get('title')} ({item.get('price')}€)", "buy")
 
             # Record pending purchase
             async with AsyncSessionLocal() as db:
@@ -85,9 +90,9 @@ class BuyEngine:
 
                 if result.success:
                     self._bought_this_session.add(item_id)
-                    await self._log(db, "success", f"Bought: {item.get('title')} for {result.price_paid}€", "buy")
+                    await self._log(db, "success", f"Acheté: {item.get('title')} pour {result.price_paid}€", "buy")
                 else:
-                    await self._log(db, "error", f"Buy failed for {item.get('title')}: {result.error}", "buy")
+                    await self._log(db, "error", f"Échec d'achat pour {item.get('title')}: {result.error}", "buy")
 
             await self.ws.broadcast_buy_result(
                 item_id=item_id,
@@ -111,6 +116,28 @@ class BuyEngine:
         )
         spent = result.scalar() or 0.0
         return spent < max_budget
+
+    async def _check_hourly_global_limit(self, db) -> bool:
+        """Return True if global hourly purchase count is below the max_buy_per_hour setting."""
+        # Load setting
+        row = await db.execute(select(Setting).where(Setting.key == "max_buy_per_hour"))
+        setting = row.scalar_one_or_none()
+        if not setting or not setting.value:
+            return True
+        try:
+            max_per_hour = int(setting.value)
+        except (ValueError, TypeError):
+            return True
+
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+        result = await db.execute(
+            select(sa_func.count(Purchase.id)).where(
+                Purchase.status == "success",
+                Purchase.attempted_at >= cutoff,
+            )
+        )
+        count = result.scalar() or 0
+        return count < max_per_hour
 
     async def _log(self, db, level: str, message: str, category: str) -> None:
         log = ActivityLog(level=level, category=category, message=message)

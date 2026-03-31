@@ -117,6 +117,21 @@
 
   // ── Connect WebSocket ────────────────────────────────────────────────────
   wsClient.connect();
+  wsClient.initSoundToggle();
+
+  // ── Items/min rate display ───────────────────────────────────────────────
+  let _rateLastCount = store.get('itemsSeen') || 0;
+  let _rateLastTime  = Date.now();
+  setInterval(() => {
+    const now     = Date.now();
+    const elapsed = (now - _rateLastTime) / 60000; // minutes
+    const current = store.get('itemsSeen');
+    const rate    = elapsed > 0 ? Math.round((current - _rateLastCount) / elapsed) : 0;
+    const el = document.getElementById('stat-rate');
+    if (el) el.textContent = rate;
+    _rateLastCount = current;
+    _rateLastTime  = now;
+  }, 30000);
 
   // ── Keyboard shortcut: Escape closes modal ───────────────────────────────
   document.addEventListener('keydown', e => {
