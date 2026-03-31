@@ -1,4 +1,7 @@
 const filtersView = (() => {
+  // Cache brand names locally (not persisted in DB) keyed by filter id
+  const _brandNamesCache = new Map();
+
   function init() {
     document.getElementById('add-filter-btn').addEventListener('click', () => openFilterModal(null));
     loadFilters();
@@ -114,6 +117,18 @@ const filtersView = (() => {
       const max = f.price_max != null ? f.price_max + '€' : '∞';
       chips.push(`<span class="filter-chip price">💶 ${min} – ${max}</span>`);
     }
+    // Brand chips
+    if (f.brand_ids?.length) {
+      const names = _brandNamesCache.get(f.id);
+      const label = names
+        ? names.slice(0, 3).join(', ') + (names.length > 3 ? '…' : '')
+        : `${f.brand_ids.length} marque${f.brand_ids.length > 1 ? 's' : ''}`;
+      chips.push(`<span class="filter-chip brand">🏷 ${escHtml(label)}</span>`);
+    }
+    // Category chip
+    if (f.category_ids?.length) {
+      chips.push(`<span class="filter-chip category">📂 catégorie</span>`);
+    }
     if (f.auto_buy)   chips.push(`<span class="filter-chip autobuy">⚡ Auto-achat</span>`);
     if (f.conditions?.length) chips.push(`<span class="filter-chip">${f.conditions.length} état(s)</span>`);
     if (f.country_codes?.length) chips.push(`<span class="filter-chip">${f.country_codes.join(', ')}</span>`);
@@ -123,7 +138,12 @@ const filtersView = (() => {
   }
 
   function openFilterModal(existing) {
-    const formEl = filterForm.build(existing);
+    // Enrich with cached brand names for display
+    const enriched = existing
+      ? { ...existing, brand_names: _brandNamesCache.get(existing.id) || [] }
+      : null;
+
+    const formEl = filterForm.build(enriched);
 
     modal.open(existing ? 'Modifier le filtre' : 'Nouveau filtre', formEl);
 
@@ -132,12 +152,25 @@ const filtersView = (() => {
     formEl.querySelector('#ff-save').addEventListener('click', async () => {
       const data = filterForm.read(formEl);
       if (!data) return;
+
+      // Separate brand_names (display-only) before sending to API
+      const brandNames = data.brand_names;
+      const payload = { ...data };
+      delete payload.brand_names;
+
       try {
+        let savedFilter;
         if (existing) {
-          await api.replaceFilter(existing.id, data);
+          savedFilter = await api.replaceFilter(existing.id, payload);
+          // Cache brand names for display
+          if (brandNames?.length) _brandNamesCache.set(existing.id, brandNames);
           toast.show('Filtre mis à jour.', 'success');
         } else {
-          await api.createFilter(data);
+          savedFilter = await api.createFilter(payload);
+          // Cache brand names for the newly created filter
+          if (savedFilter?.id && brandNames?.length) {
+            _brandNamesCache.set(savedFilter.id, brandNames);
+          }
           toast.show('Filtre créé.', 'success');
         }
         modal.close();
@@ -183,6 +216,7 @@ const filtersView = (() => {
     if (!confirm(`Supprimer le filtre "${f.name}" ?`)) return;
     try {
       await api.deleteFilter(f.id);
+      _brandNamesCache.delete(f.id);
       card.remove();
       toast.show('Filtre supprimé.', 'success');
       updateBadgeCount();

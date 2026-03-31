@@ -16,6 +16,7 @@ const store = (() => {
     itemsMatched: 0,
     itemsBought: 0,
     pollIntervalMs: 4000,
+    soundEnabled: false,
   };
 
   const listeners = {};

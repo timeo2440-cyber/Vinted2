@@ -9,7 +9,7 @@ from vinted.client import VintedClient
 from vinted.auth import parse_cookie_string
 from bot.poller import ItemPoller
 from ws.manager import ws_manager
-from api import filters, settings, bot_control, history, stats, logs
+from api import filters, settings, bot_control, history, stats, logs, vinted_meta
 from config import settings as app_settings
 import os
 
@@ -62,6 +62,7 @@ app.include_router(bot_control.router)
 app.include_router(history.router)
 app.include_router(stats.router)
 app.include_router(logs.router)
+app.include_router(vinted_meta.router)
 
 
 # WebSocket endpoint

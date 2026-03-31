@@ -7,6 +7,47 @@ const wsClient = (() => {
   let reconnectDelay = 1000;
   let pingTimer = null;
 
+  // ── Sound helpers ──────────────────────────────────────────────────────────
+
+  function playBeep() {
+    if (!store.get('soundEnabled')) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+      osc.onended = () => ctx.close();
+    } catch {}
+  }
+
+  function playSuccessChime() {
+    if (!store.get('soundEnabled')) return;
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [1047, 1319].forEach((freq, i) => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.2,   ctx.currentTime + i * 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.15 + 0.3);
+        osc.start(ctx.currentTime + i * 0.15);
+        osc.stop(ctx.currentTime  + i * 0.15 + 0.35);
+      });
+      setTimeout(() => ctx.close(), 800);
+    } catch {}
+  }
+
+  // ── Connection ─────────────────────────────────────────────────────────────
+
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const url = `${proto}://${location.host}/ws`;
@@ -54,6 +95,7 @@ const wsClient = (() => {
         });
         store.set('itemsMatched', store.get('itemsMatched') + 1);
         document.getElementById('stat-matched').textContent = store.get('itemsMatched');
+        playBeep();
         break;
 
       case 'buy_attempt':
@@ -67,6 +109,7 @@ const wsClient = (() => {
           store.set('itemsBought', bought);
           document.getElementById('stat-bought').textContent = bought;
           toast.show(`Acheté avec succès ! ${data.price ? data.price + '€' : ''}`, 'success');
+          playSuccessChime();
         } else {
           store.updateItem(data.item_id, { status: 'failed' });
           toast.show(`Échec d'achat : ${data.error || 'Erreur inconnue'}`, 'error');
@@ -133,7 +176,18 @@ const wsClient = (() => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   }
 
-  return { connect, send };
+  function initSoundToggle() {
+    const btn = document.getElementById('sound-toggle');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
+      const enabled = !store.get('soundEnabled');
+      store.set('soundEnabled', enabled);
+      btn.classList.toggle('active', enabled);
+      btn.title = enabled ? 'Son activé (cliquez pour désactiver)' : 'Son désactivé (cliquez pour activer)';
+    });
+  }
+
+  return { connect, send, initSoundToggle };
 })();
 
 // Helpers used by wsClient — defined later but hoisted via function scope
