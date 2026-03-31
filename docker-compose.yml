@@ -1,0 +1,13 @@
+version: "3.9"
+
+services:
+  vinted-bot:
+    build: .
+    ports:
+      - "80:8000"        # Accès via http://localhost (sans port)
+    volumes:
+      - ./data:/app/data  # Persistance de la base de données
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/vinted_bot.db
+      - FRONTEND_DIR=/app/frontend

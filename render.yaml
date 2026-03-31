@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: vinted-autobot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:////app/data/vinted_bot.db
+      - key: FRONTEND_DIR
+        value: /app/frontend
+    disk:
+      name: data
+      mountPath: /app/data
+      sizeGB: 1
