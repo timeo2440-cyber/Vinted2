@@ -1,0 +1,41 @@
+# ================================================
+#  Service systemd — Vinted AutoBot
+#
+#  Installation (une seule fois) :
+#    sudo cp /home/user/Vinted2/vinted.service /etc/systemd/system/
+#    sudo systemctl daemon-reload
+#    sudo systemctl enable vinted
+#    sudo systemctl start vinted
+#
+#  Commandes utiles :
+#    sudo systemctl status vinted
+#    sudo systemctl stop vinted
+#    sudo systemctl restart vinted
+#    sudo journalctl -u vinted -f
+# ================================================
+
+[Unit]
+Description=Vinted AutoBot
+After=network.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=forking
+User=root
+Group=root
+WorkingDirectory=/home/user/Vinted2
+
+ExecStart=/bin/bash /home/user/Vinted2/start.sh start
+ExecStop=/bin/bash /home/user/Vinted2/start.sh stop
+PIDFile=/home/user/Vinted2/bot.pid
+
+Restart=on-failure
+RestartSec=10
+
+# Journalisation (en plus de bot.log)
+StandardOutput=append:/home/user/Vinted2/bot.log
+StandardError=append:/home/user/Vinted2/bot.log
+
+[Install]
+WantedBy=multi-user.target
