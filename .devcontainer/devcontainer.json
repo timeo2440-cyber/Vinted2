@@ -11,8 +11,7 @@
     }
   },
 
-  "postCreateCommand": "pip install -r /workspaces/Vinted2/backend/requirements.txt -q && echo '✅ Dépendances installées'",
-
+  "postCreateCommand": "cd /workspaces/Vinted2 && pip install -r backend/requirements.txt -q && echo '✅ Deps OK'",
   "postStartCommand": "bash /workspaces/Vinted2/.devcontainer/start.sh",
 
   "customizations": {
