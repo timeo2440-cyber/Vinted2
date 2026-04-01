@@ -1,14 +1,15 @@
 services:
   - type: web
     name: vinted-autobot
-    runtime: docker
-    dockerfilePath: ./Dockerfile
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
-        value: sqlite+aiosqlite:////app/data/vinted_bot.db
+        value: sqlite+aiosqlite:////opt/render/project/src/data/vinted_bot.db
       - key: FRONTEND_DIR
-        value: /app/frontend
+        value: /opt/render/project/src/frontend
     disk:
       name: data
-      mountPath: /app/data
+      mountPath: /opt/render/project/src/data
       sizeGB: 1
