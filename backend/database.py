@@ -58,6 +58,7 @@ class Purchase(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     filter_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    account_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # which account made the purchase
     vinted_item_id: Mapped[str] = mapped_column(String(100), nullable=False)
     item_title: Mapped[str | None] = mapped_column(String(500))
     price: Mapped[float | None] = mapped_column(Float)
@@ -86,6 +87,35 @@ class ActivityLog(Base):
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
 
 
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    email: Mapped[str] = mapped_column(String(300), nullable=False, unique=True)
+    password_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # base64-encoded password
+
+    # Vinted session
+    cookies: Mapped[str | None] = mapped_column(Text, nullable=True)        # JSON string
+    csrf_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    vinted_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    vinted_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    is_authenticated: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_login: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+
+    # Shipping preferences
+    default_address: Mapped[str | None] = mapped_column(Text, nullable=True)         # JSON
+    preferred_pickup_points: Mapped[str | None] = mapped_column(Text, nullable=True) # JSON list of strings
+
+    # Status
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    ban_suspected: Mapped[bool] = mapped_column(Boolean, default=False)
+    purchases_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -93,7 +123,7 @@ async def init_db():
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
         defaults = {
-            "poll_interval_ms": "4000",
+            "poll_interval_ms": "2000",
             "max_buy_per_hour": "5",
             "bot_enabled": "false",
             "vinted_cookies": "",
