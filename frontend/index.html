@@ -71,13 +71,17 @@
           </div>
         </div>
         <div class="topbar-right">
+          <div class="bot-live-badge" id="bot-live-badge" title="Bot en direct 24/7">
+            <span class="live-dot"></span>
+            <span>En direct</span>
+          </div>
           <button id="sound-toggle" class="sound-toggle-btn" title="Son désactivé">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
           </button>
-          <div id="bot-toggle-wrap">
-            <span id="bot-status-label" class="bot-label stopped">Arrêté</span>
-            <label class="toggle-switch" title="Démarrer/Arrêter le bot">
-              <input type="checkbox" id="bot-toggle" />
+          <div id="autocop-wrap">
+            <span id="autocop-label" class="autocop-label off">Autocop OFF</span>
+            <label class="toggle-switch autocop-toggle" title="Activer/Désactiver l'achat automatique">
+              <input type="checkbox" id="autocop-toggle" />
               <span class="slider"></span>
             </label>
           </div>
@@ -107,7 +111,7 @@
               <div id="item-feed" class="item-feed">
                 <div class="empty-state" id="feed-empty">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-                  <p>En attente d'articles...<br/><small>Démarrez le bot et configurez vos filtres.</small></p>
+                  <p>En attente d'articles...<br/><small>Le bot scrute Vinted en temps réel.</small></p>
                 </div>
               </div>
             </div>

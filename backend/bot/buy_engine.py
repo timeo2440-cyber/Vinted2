@@ -42,6 +42,13 @@ class BuyEngine:
         if not get_attr("auto_buy", False):
             return
 
+        # Check global autocop toggle
+        async with AsyncSessionLocal() as db:
+            row = await db.execute(select(Setting).where(Setting.key == "global_autocop"))
+            autocop_setting = row.scalar_one_or_none()
+            if not autocop_setting or autocop_setting.value.lower() != "true":
+                return
+
         async with AsyncSessionLocal() as db:
             if not await self._check_budget(db, filter_id, get_attr("max_budget")):
                 await self._log(db, "warn", f"Budget dépassé pour le filtre '{filter_name}', article ignoré: {item.get('title')}", "buy")

@@ -23,9 +23,11 @@ const api = (() => {
 
   return {
     // Bot control
-    botStart:  () => request('POST', '/api/bot/start'),
-    botStop:   () => request('POST', '/api/bot/stop'),
-    botStatus: () => request('GET',  '/api/bot/status'),
+    botStart:      () => request('POST', '/api/bot/start'),
+    botStop:       () => request('POST', '/api/bot/stop'),
+    botStatus:     () => request('GET',  '/api/bot/status'),
+    getAutocop:    () => request('GET',  '/api/bot/autocop'),
+    setAutocop:    (enabled) => request('POST', '/api/bot/autocop', { enabled }),
 
     // Filters
     getFilters:    ()           => request('GET',    '/api/filters'),

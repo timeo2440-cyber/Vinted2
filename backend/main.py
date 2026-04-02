@@ -50,6 +50,9 @@ async def lifespan(app: FastAPI):
     app.state.ws_manager = ws_manager
     app.state.account_manager = account_manager
 
+    # Auto-start: the bot always runs 24/7
+    await poller.start()
+
     yield
 
     # Shutdown

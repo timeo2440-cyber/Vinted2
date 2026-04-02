@@ -120,9 +120,11 @@ const wsClient = (() => {
         store.set('botRunning', data.running);
         store.set('itemsSeen', data.items_seen || 0);
         store.set('itemsMatched', data.items_matched || 0);
-        updateBotUI(data.running);
         document.getElementById('stat-seen').textContent = data.items_seen || 0;
         document.getElementById('stat-matched').textContent = data.items_matched || 0;
+        // Keep live badge in sync
+        const liveBadge = document.getElementById('bot-live-badge');
+        if (liveBadge) liveBadge.classList.toggle('offline', !data.running);
         break;
 
       case 'log':

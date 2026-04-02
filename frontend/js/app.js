@@ -51,26 +51,29 @@
   const hash = location.hash.replace('#', '') || 'dashboard';
   navigate(VIEWS[hash] ? hash : 'dashboard');
 
-  // ── Bot toggle ──────────────────────────────────────────────────────────────
-  const botToggle = document.getElementById('bot-toggle');
-  const botLabel  = document.getElementById('bot-status-label');
+  // ── Autocop toggle ──────────────────────────────────────────────────────────
+  const autocopToggle = document.getElementById('autocop-toggle');
+  const autocopLabel  = document.getElementById('autocop-label');
 
-  botToggle.addEventListener('change', async () => {
-    botToggle.disabled = true;
-    botLabel.textContent = '\u2026';
-    botLabel.className = 'bot-label loading';
+  function updateAutocop(enabled) {
+    autocopToggle.checked = enabled;
+    autocopLabel.textContent = enabled ? 'Autocop ON' : 'Autocop OFF';
+    autocopLabel.className = 'autocop-label ' + (enabled ? 'on' : 'off');
+    document.getElementById('autocop-wrap').classList.toggle('active', enabled);
+  }
+
+  autocopToggle.addEventListener('change', async () => {
+    const enabled = autocopToggle.checked;
+    autocopToggle.disabled = true;
     try {
-      if (botToggle.checked) {
-        await api.botStart();
-      } else {
-        await api.botStop();
-      }
+      await api.setAutocop(enabled);
+      updateAutocop(enabled);
+      toast.show(enabled ? 'Autocop activé — achats automatiques en cours !' : 'Autocop désactivé.', enabled ? 'success' : 'info');
     } catch (e) {
-      toast.show('Erreur bot : ' + e.message, 'error');
-      botToggle.checked = !botToggle.checked;
-      updateBotUI(botToggle.checked);
+      toast.show('Erreur : ' + e.message, 'error');
+      updateAutocop(!enabled); // rollback
     } finally {
-      botToggle.disabled = false;
+      autocopToggle.disabled = false;
     }
   });
 
@@ -82,10 +85,11 @@
     store.set('itemsMatched', status.items_matched || 0);
     document.getElementById('stat-seen').textContent    = status.items_seen    || 0;
     document.getElementById('stat-matched').textContent = status.items_matched || 0;
-    updateBotUI(status.running);
     updateAuthUI(status.authenticated, status.username);
     store.set('authenticated', status.authenticated);
     store.set('username', status.username);
+    // Load autocop state
+    updateAutocop(status.autocop_enabled || false);
   } catch {}
 
   // Load filters for badge

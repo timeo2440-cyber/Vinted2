@@ -214,21 +214,56 @@ svg { flex-shrink: 0; }
   flex-shrink: 0;
 }
 
-#bot-toggle-wrap {
+/* Live badge */
+.bot-live-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: var(--green-dim);
+  color: var(--green);
+  letter-spacing: 0.3px;
+}
+.bot-live-badge.offline { background: var(--bg-3); color: var(--text-muted); }
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-dot 2s infinite;
+  flex-shrink: 0;
+}
+.bot-live-badge.offline .live-dot { background: var(--text-muted); animation: none; }
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Autocop toggle */
+#autocop-wrap {
   display: flex;
   align-items: center;
   gap: 10px;
 }
-
-.bot-label {
+.autocop-label {
   font-size: 13px;
-  font-weight: 600;
-  padding: 4px 10px;
+  font-weight: 700;
+  padding: 4px 12px;
   border-radius: 20px;
+  letter-spacing: 0.5px;
+  transition: all .2s;
 }
+.autocop-label.on  { background: var(--orange-dim); color: var(--orange); }
+.autocop-label.off { background: var(--bg-3); color: var(--text-muted); }
+.autocop-toggle .slider { background: var(--bg-3); }
+.autocop-toggle input:checked + .slider { background: var(--orange); }
+
+/* Legacy — keep for backwards compat */
 .bot-label.running { background: var(--green-dim); color: var(--green); }
 .bot-label.stopped { background: var(--bg-3); color: var(--text-muted); }
-.bot-label.loading { background: var(--yellow-dim); color: var(--yellow); }
 
 /* Toggle switch */
 .toggle-switch {
