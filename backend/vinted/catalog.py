@@ -1,5 +1,9 @@
+import logging
 from typing import Optional
 from vinted.client import VintedClient
+from vinted.exceptions import VintedAuthError, VintedNetworkError
+
+logger = logging.getLogger("vinted.catalog")
 
 
 def normalize_item(raw: dict) -> dict:
@@ -90,10 +94,32 @@ async def fetch_newest_items(
 
     try:
         data = await client.get("/catalog/items", params=params)
-    except Exception:
+    except VintedAuthError:
+        logger.warning("Catalog fetch: auth error (403/401) — session may need refresh")
+        raise
+    except VintedNetworkError as e:
+        logger.warning(f"Catalog fetch: network error — {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Catalog fetch: unexpected error — {e}")
         raise
 
+    # Detect Cloudflare/unexpected HTML response
+    if "raw" in data:
+        raw_text = data["raw"][:200] if data.get("raw") else ""
+        logger.error(
+            f"Catalog API returned non-JSON (Cloudflare? blocked?). "
+            f"Preview: {raw_text!r}. "
+            f"Fix: paste valid Vinted cookies in Settings."
+        )
+        return []
+
     raw_items = data.get("items") or data.get("catalog_items") or []
+
+    if not raw_items:
+        keys = list(data.keys())
+        logger.warning(f"Catalog API returned 0 items. Response keys: {keys}")
+
     return [normalize_item(item) for item in raw_items]
 
 

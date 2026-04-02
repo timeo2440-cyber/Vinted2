@@ -34,11 +34,14 @@ class VintedClient:
             "Accept": "application/json, text/plain, */*",
             "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
             "Accept-Encoding": "gzip, deflate, br",
+            "Referer": f"{self.base_url}/catalog",
+            "Origin": self.base_url,
             "Sec-Fetch-Dest": "empty",
             "Sec-Fetch-Mode": "cors",
             "Sec-Fetch-Site": "same-origin",
             "X-Requested-With": "XMLHttpRequest",
-            "DNT": "1",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
             "Connection": "keep-alive",
         }
 

@@ -242,3 +242,66 @@ async def get_categories(request: Request):
 
     # Fallback: return static category list
     return {"categories": STATIC_CATEGORIES}
+
+
+@router.get("/debug")
+async def debug_vinted(request: Request):
+    """
+    Live diagnostic: test the Vinted connection and return detailed info.
+    Visit /api/vinted/debug in your browser to see what's happening.
+    """
+    client = request.app.state.vinted_client
+    result = {
+        "csrf_token": bool(client._csrf_token),
+        "has_cookies": bool(client._cookies or (client._session and client._session.cookies)),
+        "steps": [],
+    }
+
+    # Step 1: fetch CSRF
+    try:
+        import httpx
+        resp = await client._session.get(client.base_url) if client._session else None
+        if resp:
+            result["homepage_status"] = resp.status_code
+            result["homepage_content_type"] = resp.headers.get("content-type", "")
+            result["homepage_is_html"] = "text/html" in resp.headers.get("content-type", "")
+            # Check if Cloudflare challenge
+            text_preview = resp.text[:300] if resp.text else ""
+            result["cloudflare_challenge"] = "cf-browser-verification" in text_preview or "Just a moment" in text_preview
+            result["steps"].append(f"Homepage: HTTP {resp.status_code}")
+        else:
+            result["steps"].append("No session initialized")
+    except Exception as e:
+        result["steps"].append(f"Homepage error: {e}")
+
+    # Step 2: try catalog API
+    try:
+        data = await client.get("/catalog/items", params={"order": "newest_first", "per_page": 5})
+        if "raw" in data:
+            result["catalog_status"] = "ERROR: non-JSON response (Cloudflare/blocked)"
+            result["catalog_preview"] = data["raw"][:300]
+        else:
+            items = data.get("items") or data.get("catalog_items") or []
+            result["catalog_status"] = f"OK — {len(items)} items returned"
+            result["catalog_keys"] = list(data.keys())
+        result["steps"].append(f"Catalog API: {result.get('catalog_status','?')}")
+    except Exception as e:
+        result["catalog_status"] = f"ERROR: {e}"
+        result["steps"].append(f"Catalog error: {e}")
+
+    # Diagnosis
+    if result.get("cloudflare_challenge"):
+        result["diagnosis"] = (
+            "BLOQUÉ PAR CLOUDFLARE. L'IP du serveur est bloquée. "
+            "Solution : allez dans Paramètres et collez vos cookies Vinted "
+            "(depuis votre navigateur connecté à Vinted)."
+        )
+    elif "OK" in str(result.get("catalog_status", "")):
+        result["diagnosis"] = "CONNEXION OK — le bot devrait afficher des articles."
+    else:
+        result["diagnosis"] = (
+            "Erreur de connexion. "
+            "Solution : collez vos cookies Vinted dans l'onglet Paramètres."
+        )
+
+    return result

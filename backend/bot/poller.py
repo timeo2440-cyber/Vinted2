@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import select
@@ -11,6 +12,8 @@ from bot.filter_engine import FilterEngine
 from bot.buy_engine import BuyEngine
 from bot.rate_limiter import AdaptiveRateLimiter
 from ws.manager import WebSocketManager
+
+logger = logging.getLogger("bot.poller")
 
 
 class ItemPoller:
@@ -28,6 +31,7 @@ class ItemPoller:
         self._task: Optional[asyncio.Task] = None
         self._consecutive_errors: int = 0
         self._max_seen_cache: int = 5000
+        self._empty_cycles: int = 0
 
     async def start(self) -> None:
         if self.running:
@@ -37,7 +41,7 @@ class ItemPoller:
         self._start_time = time.monotonic()
         await self._seed_seen_ids()
         self._task = asyncio.create_task(self._loop())
-        await self._log("info", "Bot started", "poller")
+        await self._log("info", "Bot démarré — scrutation Vinted en cours…", "poller")
         await self.ws.broadcast_bot_status(await self._get_status())
 
     async def stop(self) -> None:
@@ -49,7 +53,7 @@ class ItemPoller:
             except asyncio.CancelledError:
                 pass
             self._task = None
-        await self._log("info", "Bot stopped", "poller")
+        await self._log("info", "Bot arrêté.", "poller")
         await self.ws.broadcast_bot_status(await self._get_status())
 
     async def _seed_seen_ids(self) -> None:
@@ -61,6 +65,16 @@ class ItemPoller:
                 self.seen_ids.add(row)
 
     async def _loop(self) -> None:
+        await self._log("info", "Initialisation de la session Vinted…", "poller")
+        csrf = await self.client.fetch_csrf_token()
+        if csrf:
+            await self._log("info", "Session Vinted initialisée (token CSRF obtenu).", "poller")
+        else:
+            await self._log("warn",
+                "Impossible d'obtenir le token CSRF. "
+                "Si le bot ne montre rien, collez des cookies Vinted valides dans Paramètres.",
+                "poller")
+
         while self.running:
             try:
                 await self.rate_limiter.acquire()
@@ -69,23 +83,32 @@ class ItemPoller:
                 self._consecutive_errors = 0
             except VintedAuthError as e:
                 self._consecutive_errors += 1
-                await self._log("warn", f"Session Vinted expirée, réinitialisation...", "auth")
-                # Try to re-init anonymous session before giving up
+                await self._log("warn",
+                    "Erreur d'authentification Vinted (403/401). "
+                    "Tentative de réinitialisation de la session…",
+                    "auth")
                 try:
-                    await self.client.fetch_csrf_token()
-                    await self._log("info", "Session Vinted réinitialisée.", "auth")
-                except Exception:
-                    await self.ws.broadcast_auth_error(str(e))
-                await asyncio.sleep(10)
+                    csrf = await self.client.fetch_csrf_token()
+                    if csrf:
+                        await self._log("info", "Session réinitialisée avec succès.", "auth")
+                    else:
+                        await self._log("error",
+                            "Réinitialisation échouée. "
+                            "➜ Copiez vos cookies Vinted dans Paramètres pour débloquer.",
+                            "auth")
+                        await self.ws.broadcast_auth_error(str(e))
+                except Exception as ex:
+                    await self._log("error", f"Réinitialisation échouée : {ex}", "auth")
+                await asyncio.sleep(15)
             except VintedRateLimitError as e:
                 self._consecutive_errors += 1
                 self.rate_limiter.on_rate_limited(e.retry_after)
-                await self._log("warn", f"Rate limited. Waiting {e.retry_after}s", "poller")
+                await self._log("warn", f"Rate-limited par Vinted. Pause {e.retry_after}s…", "poller")
                 await asyncio.sleep(e.retry_after)
             except VintedNetworkError as e:
                 self._consecutive_errors += 1
                 self.rate_limiter.on_error()
-                await self._log("warn", f"Network error: {e}", "poller")
+                await self._log("warn", f"Erreur réseau : {e}", "poller")
                 backoff = min(30, 2 ** min(self._consecutive_errors, 5))
                 await asyncio.sleep(backoff)
             except asyncio.CancelledError:
@@ -93,7 +116,7 @@ class ItemPoller:
             except Exception as e:
                 self._consecutive_errors += 1
                 self.rate_limiter.on_error()
-                await self._log("error", f"Unexpected error: {e}", "poller")
+                await self._log("error", f"Erreur inattendue : {e}", "poller")
                 await asyncio.sleep(5)
 
     async def _poll_cycle(self) -> None:
@@ -105,6 +128,20 @@ class ItemPoller:
             poll_interval = int(poll_ms_setting.value) / 1000 if poll_ms_setting and poll_ms_setting.value else 2.0
 
         items = await fetch_newest_items(self.client, per_page=96)
+
+        if not items:
+            self._empty_cycles += 1
+            # Log every 10 empty cycles to avoid flooding
+            if self._empty_cycles % 10 == 1:
+                await self._log("warn",
+                    f"Vinted ne renvoie aucun article ({self._empty_cycles} cycles vides). "
+                    "Cause probable : IP bloquée ou cookies expirés. "
+                    "➜ Collez des cookies valides dans l'onglet Paramètres.",
+                    "poller")
+            await asyncio.sleep(poll_interval)
+            return
+
+        self._empty_cycles = 0
 
         new_items = []
         for item in items:
@@ -118,6 +155,7 @@ class ItemPoller:
                 self.seen_ids = set(list(self.seen_ids)[excess:])
 
         if not new_items:
+            await asyncio.sleep(poll_interval)
             return
 
         self.items_seen += len(new_items)
@@ -174,6 +212,12 @@ class ItemPoller:
         return await self._get_status()
 
     async def _log(self, level: str, message: str, category: str) -> None:
+        logger.log(
+            logging.WARNING if level == "warn" else
+            logging.ERROR if level == "error" else
+            logging.INFO,
+            message
+        )
         await self.ws.broadcast_log(level, message, category)
         async with AsyncSessionLocal() as db:
             db.add(ActivityLog(level=level, category=category, message=message))
