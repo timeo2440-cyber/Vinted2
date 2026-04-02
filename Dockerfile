@@ -1,8 +1,10 @@
 FROM python:3.11-slim
 
-# Dépendances système
+# Dépendances système (curl_cffi a besoin de libcurl + libssl)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    libssl-dev \
+    ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

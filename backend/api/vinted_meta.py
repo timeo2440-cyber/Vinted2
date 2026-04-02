@@ -259,7 +259,6 @@ async def debug_vinted(request: Request):
 
     # Step 1: fetch CSRF
     try:
-        import httpx
         resp = await client._session.get(client.base_url) if client._session else None
         if resp:
             result["homepage_status"] = resp.status_code
