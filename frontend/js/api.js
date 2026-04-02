@@ -28,6 +28,7 @@ const api = (() => {
     botStatus:     () => request('GET',  '/api/bot/status'),
     getAutocop:    () => request('GET',  '/api/bot/autocop'),
     setAutocop:    (enabled) => request('POST', '/api/bot/autocop', { enabled }),
+    manualBuy:     (item)    => request('POST', '/api/bot/manual-buy', item),
 
     // Filters
     getFilters:    ()           => request('GET',    '/api/filters'),
