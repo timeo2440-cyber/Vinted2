@@ -113,11 +113,17 @@ class VintedClient:
         await self._ensure_session()
         try:
             resp = await self._session.get(self.base_url)
-            # Extract from cookie
-            csrf = self._session.cookies.get("XSRF-TOKEN") or self._session.cookies.get("_vinted_fr_session")
+            # Priority 1: X-CSRF-Token response header
             if resp.headers.get("X-CSRF-Token"):
                 self._csrf_token = resp.headers["X-CSRF-Token"]
                 return self._csrf_token
+            # Priority 2: XSRF-TOKEN cookie (URL-encoded on Vinted)
+            from urllib.parse import unquote
+            for name in ("XSRF-TOKEN", "xsrf-token"):
+                raw = self._session.cookies.get(name)
+                if raw:
+                    self._csrf_token = unquote(raw)
+                    return self._csrf_token
             return None
         except Exception:
             return None

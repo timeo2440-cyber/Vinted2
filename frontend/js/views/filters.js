@@ -1,6 +1,7 @@
 const filtersView = (() => {
-  // Cache brand names locally (not persisted in DB) keyed by filter id
-  const _brandNamesCache = new Map();
+  // Cache display names locally (not persisted in DB) keyed by filter id
+  const _brandNamesCache    = new Map();
+  const _categoryNamesCache = new Map();
 
   function init() {
     document.getElementById('add-filter-btn').addEventListener('click', () => openFilterModal(null));
@@ -125,9 +126,13 @@ const filtersView = (() => {
         : `${f.brand_ids.length} marque${f.brand_ids.length > 1 ? 's' : ''}`;
       chips.push(`<span class="filter-chip brand">🏷 ${escHtml(label)}</span>`);
     }
-    // Category chip
+    // Category chips
     if (f.category_ids?.length) {
-      chips.push(`<span class="filter-chip category">📂 catégorie</span>`);
+      const catNames = _categoryNamesCache.get(f.id);
+      const catLabel = catNames
+        ? catNames.slice(0, 2).join(', ') + (catNames.length > 2 ? '…' : '')
+        : `${f.category_ids.length} catégorie${f.category_ids.length > 1 ? 's' : ''}`;
+      chips.push(`<span class="filter-chip category">📂 ${escHtml(catLabel)}</span>`);
     }
     if (f.auto_buy)   chips.push(`<span class="filter-chip autobuy">⚡ Auto-achat</span>`);
     if (f.conditions?.length) chips.push(`<span class="filter-chip">${f.conditions.length} état(s)</span>`);
@@ -138,13 +143,14 @@ const filtersView = (() => {
   }
 
   function openFilterModal(existing) {
-    // Enrich with cached brand names for display
-    const enriched = existing
-      ? { ...existing, brand_names: _brandNamesCache.get(existing.id) || [] }
-      : null;
+    // Enrich with cached display names
+    const enriched = existing ? {
+      ...existing,
+      brand_names:    _brandNamesCache.get(existing.id)    || [],
+      category_names: _categoryNamesCache.get(existing.id) || [],
+    } : null;
 
     const formEl = filterForm.build(enriched);
-
     modal.open(existing ? 'Modifier le filtre' : 'Nouveau filtre', formEl);
 
     formEl.querySelector('#ff-cancel').addEventListener('click', () => modal.close());
@@ -153,23 +159,25 @@ const filtersView = (() => {
       const data = filterForm.read(formEl);
       if (!data) return;
 
-      // Separate brand_names (display-only) before sending to API
-      const brandNames = data.brand_names;
+      // Strip display-only fields before sending to API
+      const brandNames    = data.brand_names;
+      const categoryNames = data.category_names;
       const payload = { ...data };
       delete payload.brand_names;
+      delete payload.category_names;
 
       try {
         let savedFilter;
         if (existing) {
           savedFilter = await api.replaceFilter(existing.id, payload);
-          // Cache brand names for display
-          if (brandNames?.length) _brandNamesCache.set(existing.id, brandNames);
+          if (brandNames?.length)    _brandNamesCache.set(existing.id, brandNames);
+          if (categoryNames?.length) _categoryNamesCache.set(existing.id, categoryNames);
           toast.show('Filtre mis à jour.', 'success');
         } else {
           savedFilter = await api.createFilter(payload);
-          // Cache brand names for the newly created filter
-          if (savedFilter?.id && brandNames?.length) {
-            _brandNamesCache.set(savedFilter.id, brandNames);
+          if (savedFilter?.id) {
+            if (brandNames?.length)    _brandNamesCache.set(savedFilter.id, brandNames);
+            if (categoryNames?.length) _categoryNamesCache.set(savedFilter.id, categoryNames);
           }
           toast.show('Filtre créé.', 'success');
         }
@@ -217,6 +225,7 @@ const filtersView = (() => {
     try {
       await api.deleteFilter(f.id);
       _brandNamesCache.delete(f.id);
+      _categoryNamesCache.delete(f.id);
       card.remove();
       toast.show('Filtre supprimé.', 'success');
       updateBadgeCount();

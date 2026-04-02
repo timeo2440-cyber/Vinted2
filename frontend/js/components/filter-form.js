@@ -16,18 +16,26 @@ const filterForm = (() => {
   ];
 
   // Module-level state — reset on each build()
-  let _selectedBrands = [];      // [{id, title}]
-  let _categoryCache  = null;    // null until first successful fetch
+  let _selectedBrands     = [];   // [{id, title}]
+  let _selectedCategories = [];   // [{id, title, full_title}]
+  let _categoryCache      = null; // null until first successful fetch
 
   function build(existing) {
     const f = existing || {};
-    const condSelected = f.conditions || [];
-    const countryCodes = f.country_codes || [];
+    const condSelected  = f.conditions    || [];
+    const countryCodes  = f.country_codes || [];
 
-    // Reset brands from existing filter
+    // Restore brands from existing filter
     _selectedBrands = (f.brand_ids || []).map((id, i) => ({
       id,
       title: (f.brand_names || [])[i] || `#${id}`,
+    }));
+
+    // Restore categories from existing filter
+    _selectedCategories = (f.category_ids || []).map((id, i) => ({
+      id,
+      title: (f.category_names || [])[i] || `#${id}`,
+      full_title: (f.category_names || [])[i] || `#${id}`,
     }));
 
     const condHtml = CONDITIONS.map(c =>
@@ -65,10 +73,12 @@ const filterForm = (() => {
       </div>
 
       <div class="form-group">
-        <label>Catégorie</label>
-        <select id="ff-category">
-          <option value="">Toutes les catégories</option>
-        </select>
+        <label>Catégories</label>
+        <div class="brand-search-wrap">
+          <input type="text" id="ff-cat-input" placeholder="Rechercher une catégorie… (ex: Robes, Baskets)" autocomplete="off">
+          <div class="brand-dropdown hidden" id="ff-cat-dropdown"></div>
+        </div>
+        <div class="brand-tags" id="ff-cat-tags"></div>
         <small>Laisser vide = toutes les catégories.</small>
       </div>
 
@@ -84,6 +94,7 @@ const filterForm = (() => {
       <div class="form-group">
         <label>État de l'article</label>
         <div class="checkbox-group" id="ff-conditions">${condHtml}</div>
+        <small>Laisser vide = tous les états. Plusieurs états possibles.</small>
       </div>
 
       <div class="form-group">
@@ -140,7 +151,7 @@ const filterForm = (() => {
       });
     });
 
-    // ── Brand tags render ────────────────────────────────────────────────────
+    // ── Brand tags ───────────────────────────────────────────────────────────
     function renderBrandTags() {
       const wrap = div.querySelector('#ff-brand-tags');
       if (!wrap) return;
@@ -162,18 +173,18 @@ const filterForm = (() => {
     // ── Brand autocomplete ───────────────────────────────────────────────────
     const brandInput    = div.querySelector('#ff-brand-input');
     const brandDropdown = div.querySelector('#ff-brand-dropdown');
-    let _debounce = null;
+    let _brandDebounce  = null;
 
     brandInput.addEventListener('input', () => {
-      clearTimeout(_debounce);
+      clearTimeout(_brandDebounce);
       const q = brandInput.value.trim();
       if (q.length < 2) { brandDropdown.classList.add('hidden'); return; }
 
-      _debounce = setTimeout(async () => {
+      _brandDebounce = setTimeout(async () => {
         try {
           const { brands } = await api.searchBrands(q);
-          if (!brands.length) {
-            brandDropdown.innerHTML = `<div class="brand-option-empty">Aucun résultat</div>`;
+          if (!brands || !brands.length) {
+            brandDropdown.innerHTML = `<div class="brand-option-empty">Aucun résultat pour "${escHtml(q)}"</div>`;
           } else {
             brandDropdown.innerHTML = brands.map(b =>
               `<div class="brand-option" data-id="${b.id}" data-title="${escHtml(b.title)}">${escHtml(b.title)}</div>`
@@ -197,27 +208,85 @@ const filterForm = (() => {
     });
 
     brandInput.addEventListener('blur', () => {
-      setTimeout(() => brandDropdown.classList.add('hidden'), 150);
+      setTimeout(() => brandDropdown.classList.add('hidden'), 200);
     });
 
-    // ── Category selector ────────────────────────────────────────────────────
+    // ── Category tags ────────────────────────────────────────────────────────
+    function renderCategoryTags() {
+      const wrap = div.querySelector('#ff-cat-tags');
+      if (!wrap) return;
+      wrap.innerHTML = _selectedCategories.map(c =>
+        `<span class="brand-tag cat-tag" data-id="${c.id}">
+           ${escHtml(c.full_title || c.title)}
+           <button type="button" class="brand-tag-remove" data-id="${c.id}" title="Retirer">×</button>
+         </span>`
+      ).join('');
+      wrap.querySelectorAll('.brand-tag-remove').forEach(btn => {
+        btn.addEventListener('click', () => {
+          _selectedCategories = _selectedCategories.filter(c => String(c.id) !== String(btn.dataset.id));
+          renderCategoryTags();
+        });
+      });
+    }
+    renderCategoryTags();
+
+    // ── Category autocomplete ────────────────────────────────────────────────
+    const catInput    = div.querySelector('#ff-cat-input');
+    const catDropdown = div.querySelector('#ff-cat-dropdown');
+    let _catDebounce  = null;
+
+    // Load categories once and cache
     (async () => {
-      const sel = div.querySelector('#ff-category');
       try {
         if (!_categoryCache) {
           const { categories } = await api.getCategories();
           _categoryCache = categories || [];
         }
-        const selectedId = (f.category_ids || [])[0];
-        _categoryCache.forEach(cat => {
-          const opt = document.createElement('option');
-          opt.value = cat.id;
-          opt.textContent = cat.full_title || cat.title;
-          if (selectedId && String(cat.id) === String(selectedId)) opt.selected = true;
-          sel.appendChild(opt);
-        });
-      } catch { /* categories unavailable — select stays with "Toutes" */ }
+      } catch { _categoryCache = []; }
     })();
+
+    function _showCategoryDropdown(q) {
+      if (!_categoryCache) return;
+      const filtered = q.length < 1
+        ? _categoryCache.slice(0, 30)
+        : _categoryCache.filter(c =>
+            (c.full_title || c.title || '').toLowerCase().includes(q.toLowerCase())
+          ).slice(0, 30);
+
+      if (!filtered.length) {
+        catDropdown.innerHTML = `<div class="brand-option-empty">Aucune catégorie trouvée</div>`;
+      } else {
+        catDropdown.innerHTML = filtered.map(c =>
+          `<div class="brand-option" data-id="${c.id}" data-title="${escHtml(c.title)}" data-full="${escHtml(c.full_title || c.title)}">${escHtml(c.full_title || c.title)}</div>`
+        ).join('');
+        catDropdown.querySelectorAll('.brand-option').forEach(opt => {
+          opt.addEventListener('mousedown', e => {
+            e.preventDefault();
+            const id = parseInt(opt.dataset.id);
+            if (!_selectedCategories.find(c => c.id === id)) {
+              _selectedCategories.push({ id, title: opt.dataset.title, full_title: opt.dataset.full });
+              renderCategoryTags();
+            }
+            catInput.value = '';
+            catDropdown.classList.add('hidden');
+          });
+        });
+      }
+      catDropdown.classList.remove('hidden');
+    }
+
+    catInput.addEventListener('focus', () => {
+      if (_categoryCache) _showCategoryDropdown(catInput.value.trim());
+    });
+
+    catInput.addEventListener('input', () => {
+      clearTimeout(_catDebounce);
+      _catDebounce = setTimeout(() => _showCategoryDropdown(catInput.value.trim()), 150);
+    });
+
+    catInput.addEventListener('blur', () => {
+      setTimeout(() => catDropdown.classList.add('hidden'), 200);
+    });
 
     return div;
   }
@@ -232,25 +301,26 @@ const filterForm = (() => {
     const countrySelect = container.querySelector('#ff-countries');
     const country_codes = [...countrySelect.selectedOptions].map(o => o.value);
 
-    const catVal = container.querySelector('#ff-category').value;
-    const category_ids = catVal ? [parseInt(catVal)] : null;
+    const brand_ids   = _selectedBrands.length     ? _selectedBrands.map(b => b.id)             : null;
+    const brand_names = _selectedBrands.length     ? _selectedBrands.map(b => b.title)           : null;
 
-    const brand_ids   = _selectedBrands.length ? _selectedBrands.map(b => b.id)    : null;
-    const brand_names = _selectedBrands.length ? _selectedBrands.map(b => b.title) : null;
+    const category_ids   = _selectedCategories.length ? _selectedCategories.map(c => c.id)       : null;
+    const category_names = _selectedCategories.length ? _selectedCategories.map(c => c.full_title || c.title) : null;
 
     return {
       name,
       keywords:      container.querySelector('#ff-keywords').value.trim() || null,
       price_min:     parseFloat(container.querySelector('#ff-price-min').value) || null,
       price_max:     parseFloat(container.querySelector('#ff-price-max').value) || null,
-      max_budget:    parseFloat(container.querySelector('#ff-budget').value) || null,
-      conditions:    conditions.length ? conditions : null,
+      max_budget:    parseFloat(container.querySelector('#ff-budget').value)    || null,
+      conditions:    conditions.length   ? conditions   : null,
       country_codes: country_codes.length ? country_codes : null,
       auto_buy:      container.querySelector('#ff-autobuy').checked,
       enabled:       container.querySelector('#ff-enabled').checked,
       brand_ids,
-      brand_names,   // display-only, not persisted by backend
+      brand_names,     // display-only, stripped before API call
       category_ids,
+      category_names,  // display-only, stripped before API call
     };
   }
 
