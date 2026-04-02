@@ -6,6 +6,7 @@
   <title>Vinted AutoBot</title>
   <link rel="stylesheet" href="/static/css/main.css" />
   <link rel="stylesheet" href="/static/css/components.css" />
+  <link rel="stylesheet" href="/static/css/accounts.css" />
 </head>
 <body>
   <div id="app">
@@ -28,6 +29,11 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
           Filtres
           <span id="filter-badge" class="badge hidden">0</span>
+        </a>
+        <a href="#accounts" class="nav-link" data-view="accounts">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Comptes
+          <span id="accounts-badge" class="badge hidden">0</span>
         </a>
         <a href="#history" class="nav-link" data-view="history">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 0 .5-4.5"/><polyline points="3 3 3 9 9 9"/></svg>
@@ -132,6 +138,23 @@
           </div>
         </section>
 
+        <!-- Accounts -->
+        <section id="view-accounts" class="view">
+          <div class="view-header">
+            <h2>Comptes Vinted</h2>
+            <button id="add-account-btn" class="btn-primary">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Ajouter un compte
+            </button>
+          </div>
+          <p class="help-text">Ajoutez plusieurs comptes Vinted pour répartir les achats et éviter les bans. Le bot alternera automatiquement entre les comptes actifs et connectés.</p>
+          <div id="accounts-list" class="accounts-grid"></div>
+          <div class="empty-state hidden" id="accounts-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <p>Aucun compte configuré.<br/><small>Ajoutez vos comptes Vinted pour activer l'achat automatique.</small></p>
+          </div>
+        </section>
+
         <!-- History -->
         <section id="view-history" class="view">
           <div class="view-header">
@@ -188,8 +211,8 @@
           <div class="view-header"><h2>Paramètres</h2></div>
           <div class="settings-grid">
             <div class="settings-card">
-              <h3>Authentification Vinted</h3>
-              <p class="help-text">Copiez vos cookies depuis les outils de développement de votre navigateur (onglet Réseau → En-têtes de requête → Cookie).</p>
+              <h3>Authentification Vinted (compte principal)</h3>
+              <p class="help-text">Copiez vos cookies depuis les outils de développement de votre navigateur (onglet Réseau → En-têtes de requête → Cookie). Ce compte est utilisé pour le polling.</p>
               <div id="auth-result" class="auth-result hidden"></div>
               <textarea id="cookie-input" class="cookie-textarea" placeholder="_vinted_fr_session=...; auth_t=..."></textarea>
               <div class="form-actions">
@@ -204,10 +227,10 @@
               <div class="form-group">
                 <label>Intervalle de polling</label>
                 <div class="slider-row">
-                  <input type="range" id="poll-interval" min="1000" max="15000" step="500" value="4000" />
-                  <span id="poll-interval-label" class="slider-value">4s</span>
+                  <input type="range" id="poll-interval" min="1000" max="15000" step="500" value="2000" />
+                  <span id="poll-interval-label" class="slider-value">2s</span>
                 </div>
-                <small>Fréquence de vérification des nouveaux articles</small>
+                <small>Fréquence de vérification des nouveaux articles (2s = très rapide)</small>
               </div>
               <div class="form-group">
                 <label>Achats max / heure</label>
@@ -247,6 +270,7 @@
   <script src="/static/js/components/activity-log.js"></script>
   <script src="/static/js/views/dashboard.js"></script>
   <script src="/static/js/views/filters.js"></script>
+  <script src="/static/js/views/accounts.js"></script>
   <script src="/static/js/views/history.js"></script>
   <script src="/static/js/views/stats.js"></script>
   <script src="/static/js/views/settings.js"></script>
