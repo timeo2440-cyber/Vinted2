@@ -4,11 +4,12 @@
 (async function init() {
   // ── Router ──────────────────────────────────────────────────────────────
   const VIEWS = {
-    dashboard: { el: 'view-dashboard', title: 'Dashboard',       init: () => dashboardView.init() },
-    filters:   { el: 'view-filters',   title: 'Filtres',         init: () => filtersView.init()   },
-    history:   { el: 'view-history',   title: 'Historique',      init: () => historyView.init()   },
-    stats:     { el: 'view-stats',     title: 'Statistiques',    init: () => statsView.init()     },
-    settings:  { el: 'view-settings',  title: 'Paramètres',      init: () => settingsView.init()  },
+    dashboard: { el: 'view-dashboard', title: 'Dashboard',        init: () => dashboardView.init()  },
+    filters:   { el: 'view-filters',   title: 'Filtres',          init: () => filtersView.init()    },
+    accounts:  { el: 'view-accounts',  title: 'Comptes Vinted',   init: () => accountsView.init()   },
+    history:   { el: 'view-history',   title: 'Historique',       init: () => historyView.init()    },
+    stats:     { el: 'view-stats',     title: 'Statistiques',     init: () => statsView.init()      },
+    settings:  { el: 'view-settings',  title: 'Param\u00e8tres', init: () => settingsView.init()   },
   };
 
   const initialised = new Set();
@@ -17,36 +18,29 @@
     const view = VIEWS[viewKey];
     if (!view) return;
 
-    // Hide all views
     Object.values(VIEWS).forEach(v => {
       document.getElementById(v.el)?.classList.remove('active');
     });
-
-    // Show target
     document.getElementById(view.el)?.classList.add('active');
 
-    // Update nav links
     document.querySelectorAll('.nav-link').forEach(link => {
       link.classList.toggle('active', link.dataset.view === viewKey);
     });
 
-    // Update page title
     document.getElementById('page-title').textContent = view.title;
 
-    // Init once
     if (!initialised.has(viewKey)) {
       initialised.add(viewKey);
       view.init();
     }
 
-    // Reload stats/history when navigating to them
-    if (viewKey === 'stats' && initialised.has('stats'))    statsView.reload();
-    if (viewKey === 'history' && initialised.has('history')) historyView.reload();
+    if (viewKey === 'stats'    && initialised.has('stats'))    statsView.reload();
+    if (viewKey === 'history'  && initialised.has('history'))  historyView.reload();
+    if (viewKey === 'accounts' && initialised.has('accounts')) accountsView.reload();
 
     location.hash = viewKey;
   }
 
-  // Nav click handlers
   document.querySelectorAll('.nav-link').forEach(link => {
     link.addEventListener('click', e => {
       e.preventDefault();
@@ -54,17 +48,16 @@
     });
   });
 
-  // Hash-based routing on load
   const hash = location.hash.replace('#', '') || 'dashboard';
   navigate(VIEWS[hash] ? hash : 'dashboard');
 
-  // ── Bot toggle ───────────────────────────────────────────────────────────
+  // ── Bot toggle ──────────────────────────────────────────────────────────────
   const botToggle = document.getElementById('bot-toggle');
   const botLabel  = document.getElementById('bot-status-label');
 
   botToggle.addEventListener('change', async () => {
     botToggle.disabled = true;
-    botLabel.textContent = '…';
+    botLabel.textContent = '\u2026';
     botLabel.className = 'bot-label loading';
     try {
       if (botToggle.checked) {
@@ -101,30 +94,32 @@
     store.set('filters', filters);
     const active = filters.filter(f => f.enabled).length;
     const badge = document.getElementById('filter-badge');
-    if (badge && active > 0) {
-      badge.textContent = active;
-      badge.classList.remove('hidden');
-    }
+    if (badge && active > 0) { badge.textContent = active; badge.classList.remove('hidden'); }
   } catch {}
 
-  // Load recent logs into activity log panel
+  // Load accounts badge
+  try {
+    const accounts = await api.getAccounts();
+    const badge = document.getElementById('accounts-badge');
+    if (badge && accounts.length > 0) { badge.textContent = accounts.length; badge.classList.remove('hidden'); }
+  } catch {}
+
+  // Load recent logs
   try {
     const logs = await api.getLogs();
-    logs.reverse().forEach(log => {
-      activityLog.append(log.level, log.message, log.category);
-    });
+    logs.reverse().forEach(log => { activityLog.append(log.level, log.message, log.category); });
   } catch {}
 
-  // ── Connect WebSocket ────────────────────────────────────────────────────
+  // ── Connect WebSocket ──────────────────────────────────────────────────────────
   wsClient.connect();
   wsClient.initSoundToggle();
 
-  // ── Items/min rate display ───────────────────────────────────────────────
+  // ── Items/min rate display ────────────────────────────────────────────────────
   let _rateLastCount = store.get('itemsSeen') || 0;
   let _rateLastTime  = Date.now();
   setInterval(() => {
     const now     = Date.now();
-    const elapsed = (now - _rateLastTime) / 60000; // minutes
+    const elapsed = (now - _rateLastTime) / 60000;
     const current = store.get('itemsSeen');
     const rate    = elapsed > 0 ? Math.round((current - _rateLastCount) / elapsed) : 0;
     const el = document.getElementById('stat-rate');
@@ -133,8 +128,5 @@
     _rateLastTime  = now;
   }, 30000);
 
-  // ── Keyboard shortcut: Escape closes modal ───────────────────────────────
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') modal.close();
-  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') modal.close(); });
 })();

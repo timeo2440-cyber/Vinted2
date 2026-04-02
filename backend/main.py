@@ -7,9 +7,10 @@ from sqlalchemy import select
 from database import init_db, AsyncSessionLocal, Setting
 from vinted.client import VintedClient
 from vinted.auth import parse_cookie_string
+from vinted.account_manager import AccountManager
 from bot.poller import ItemPoller
 from ws.manager import ws_manager
-from api import filters, settings, bot_control, history, stats, logs, vinted_meta
+from api import filters, settings, bot_control, history, stats, logs, vinted_meta, accounts
 from config import settings as app_settings
 import os
 
@@ -19,11 +20,11 @@ async def lifespan(app: FastAPI):
     # Startup
     await init_db()
 
-    # Build Vinted client
+    # Build primary Vinted client (used for polling)
     client = VintedClient(app_settings.vinted_base_url)
     await client.__aenter__()
 
-    # Load saved cookies
+    # Load saved cookies for primary client
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Setting).where(Setting.key == "vinted_cookies"))
         row = result.scalar_one_or_none()
@@ -33,18 +34,24 @@ async def lifespan(app: FastAPI):
                 client.set_cookies(cookies)
                 await client.fetch_csrf_token()
 
-    # Create poller
-    poller = ItemPoller(client, ws_manager)
+    # Initialize account manager (one client per saved account)
+    account_manager = AccountManager(app_settings.vinted_base_url)
+    await account_manager.initialize()
+
+    # Create poller (passes account_manager to BuyEngine for rotation)
+    poller = ItemPoller(client, ws_manager, account_manager)
 
     # Store on app state
     app.state.vinted_client = client
     app.state.poller = poller
     app.state.ws_manager = ws_manager
+    app.state.account_manager = account_manager
 
     yield
 
     # Shutdown
     await poller.stop()
+    await account_manager.close_all()
     await client.__aexit__(None, None, None)
 
 
@@ -63,26 +70,22 @@ app.include_router(history.router)
 app.include_router(stats.router)
 app.include_router(logs.router)
 app.include_router(vinted_meta.router)
+app.include_router(accounts.router)
 
 
-# WebSocket endpoint
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await ws_manager.connect(websocket)
     try:
-        # Send initial bot status
         poller: ItemPoller = websocket.app.state.poller
         status = await poller.get_status()
         await ws_manager.broadcast_bot_status(status)
-
-        # Keep connection alive and listen for pings
         while True:
             try:
                 msg = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
                 if msg == "ping":
                     await websocket.send_text('{"type":"pong"}')
             except asyncio.TimeoutError:
-                # Send a keepalive ping
                 try:
                     await websocket.send_text('{"type":"ping"}')
                 except Exception:
@@ -98,7 +101,6 @@ async def websocket_endpoint(websocket: WebSocket):
 # Serve frontend static files
 frontend_dir = app_settings.frontend_dir
 if os.path.isdir(frontend_dir):
-    # Mount static FIRST so CSS/JS/assets are served directly without hitting route handlers
     app.mount("/static", StaticFiles(directory=frontend_dir), name="static")
 
 
@@ -107,12 +109,11 @@ async def serve_index():
     index = os.path.join(app_settings.frontend_dir, "index.html")
     if os.path.isfile(index):
         return FileResponse(index)
-    return {"error": "Frontend not found. Make sure the frontend/ folder exists."}
+    return {"error": "Frontend not found."}
 
 
 @app.get("/{path:path}", include_in_schema=False)
 async def serve_spa(path: str):
-    # Never intercept API or WS paths
     if path.startswith("api/") or path.startswith("ws"):
         from fastapi import HTTPException
         raise HTTPException(404)
