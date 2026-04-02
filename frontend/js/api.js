@@ -56,5 +56,14 @@ const api = (() => {
     // Vinted meta (brands / categories)
     searchBrands:   (q)  => request('GET', `/api/vinted/brands?q=${encodeURIComponent(q)}`),
     getCategories:  ()   => request('GET', '/api/vinted/categories'),
+
+    // Accounts
+    getAccounts:         ()           => request('GET',    '/api/accounts'),
+    createAccount:       (data)       => request('POST',   '/api/accounts', data),
+    updateAccount:       (id, data)   => request('PUT',    `/api/accounts/${id}`, data),
+    deleteAccount:       (id)         => request('DELETE', `/api/accounts/${id}`),
+    reloginAccount:      (id)         => request('POST',   `/api/accounts/${id}/login`),
+    setAccountCookies:   (id, cookies) => request('POST',  `/api/accounts/${id}/cookies`, { cookies }),
+    checkAccountStatus:  (id)         => request('GET',    `/api/accounts/${id}/status`),
   };
 })();
