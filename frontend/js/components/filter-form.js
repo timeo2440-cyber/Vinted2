@@ -175,36 +175,62 @@ const filterForm = (() => {
     const brandDropdown = div.querySelector('#ff-brand-dropdown');
     let _brandDebounce  = null;
 
+    // Popular brands shown on focus (before typing)
+    const POPULAR_BRANDS = [
+      {id:53,title:'Nike'},{id:14,title:'Adidas'},{id:3,title:'Zara'},
+      {id:26,title:'H&M'},{id:304,title:"Levi's"},{id:1341,title:'Tommy Hilfiger'},
+      {id:302,title:'Lacoste'},{id:308,title:'Calvin Klein'},{id:27,title:'Puma'},
+      {id:88,title:'Gucci'},{id:99,title:'Louis Vuitton'},{id:475,title:'Balenciaga'},
+      {id:65,title:'Mango'},{id:109,title:'Ralph Lauren'},{id:125,title:'Moncler'},
+      {id:18,title:'The North Face'},{id:19,title:'Carhartt'},{id:23,title:'Converse'},
+      {id:24,title:'Vans'},{id:25,title:'New Balance'},{id:28,title:'Reebok'},
+    ];
+
+    function _renderBrandOptions(brands) {
+      if (!brands || !brands.length) return;
+      brandDropdown.innerHTML = brands.map(b =>
+        `<div class="brand-option" data-id="${b.id}" data-title="${escHtml(b.title)}">${escHtml(b.title)}</div>`
+      ).join('');
+      brandDropdown.querySelectorAll('.brand-option').forEach(opt => {
+        opt.addEventListener('mousedown', e => {
+          e.preventDefault();
+          const id = parseInt(opt.dataset.id);
+          if (!_selectedBrands.find(b => b.id === id)) {
+            _selectedBrands.push({ id, title: opt.dataset.title });
+            renderBrandTags();
+          }
+          brandInput.value = '';
+          brandDropdown.classList.add('hidden');
+        });
+      });
+      brandDropdown.classList.remove('hidden');
+    }
+
+    brandInput.addEventListener('focus', () => {
+      if (!brandInput.value.trim()) {
+        _renderBrandOptions(POPULAR_BRANDS);
+      }
+    });
+
     brandInput.addEventListener('input', () => {
       clearTimeout(_brandDebounce);
       const q = brandInput.value.trim();
-      if (q.length < 2) { brandDropdown.classList.add('hidden'); return; }
+      if (q.length < 1) {
+        _renderBrandOptions(POPULAR_BRANDS);
+        return;
+      }
 
       _brandDebounce = setTimeout(async () => {
         try {
           const { brands } = await api.searchBrands(q);
           if (!brands || !brands.length) {
             brandDropdown.innerHTML = `<div class="brand-option-empty">Aucun résultat pour "${escHtml(q)}"</div>`;
+            brandDropdown.classList.remove('hidden');
           } else {
-            brandDropdown.innerHTML = brands.map(b =>
-              `<div class="brand-option" data-id="${b.id}" data-title="${escHtml(b.title)}">${escHtml(b.title)}</div>`
-            ).join('');
-            brandDropdown.querySelectorAll('.brand-option').forEach(opt => {
-              opt.addEventListener('mousedown', e => {
-                e.preventDefault();
-                const id = parseInt(opt.dataset.id);
-                if (!_selectedBrands.find(b => b.id === id)) {
-                  _selectedBrands.push({ id, title: opt.dataset.title });
-                  renderBrandTags();
-                }
-                brandInput.value = '';
-                brandDropdown.classList.add('hidden');
-              });
-            });
+            _renderBrandOptions(brands);
           }
-          brandDropdown.classList.remove('hidden');
         } catch { brandDropdown.classList.add('hidden'); }
-      }, 300);
+      }, 250);
     });
 
     brandInput.addEventListener('blur', () => {

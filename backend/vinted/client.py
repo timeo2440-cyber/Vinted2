@@ -109,8 +109,9 @@ class VintedClient:
         return await self.request("PATCH", path, json=json)
 
     async def fetch_csrf_token(self) -> Optional[str]:
-        """Fetch CSRF token from Vinted homepage."""
+        """Fetch CSRF token and anonymous session cookies from Vinted homepage."""
         await self._ensure_session()
+        from urllib.parse import unquote
         try:
             resp = await self._session.get(self.base_url)
             # Priority 1: X-CSRF-Token response header
@@ -118,12 +119,20 @@ class VintedClient:
                 self._csrf_token = resp.headers["X-CSRF-Token"]
                 return self._csrf_token
             # Priority 2: XSRF-TOKEN cookie (URL-encoded on Vinted)
-            from urllib.parse import unquote
             for name in ("XSRF-TOKEN", "xsrf-token"):
                 raw = self._session.cookies.get(name)
                 if raw:
                     self._csrf_token = unquote(raw)
                     return self._csrf_token
+            # Priority 3: try the API endpoint directly
+            try:
+                token_resp = await self._session.get(f"{self.api_base}/oauth/token_info")
+                token = token_resp.headers.get("X-CSRF-Token") or ""
+                if token:
+                    self._csrf_token = token
+                    return self._csrf_token
+            except Exception:
+                pass
             return None
         except Exception:
             return None

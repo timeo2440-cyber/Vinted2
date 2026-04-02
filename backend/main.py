@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     client = VintedClient(app_settings.vinted_base_url)
     await client.__aenter__()
 
-    # Load saved cookies for primary client
+    # Load saved cookies for primary client, then always fetch CSRF/anonymous session
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Setting).where(Setting.key == "vinted_cookies"))
         row = result.scalar_one_or_none()
@@ -32,7 +32,10 @@ async def lifespan(app: FastAPI):
             cookies = parse_cookie_string(row.value)
             if cookies:
                 client.set_cookies(cookies)
-                await client.fetch_csrf_token()
+
+    # Always initialize Vinted session (anonymous if no saved cookies)
+    # This fetches XSRF-TOKEN and sets anonymous session cookies
+    await client.fetch_csrf_token()
 
     # Initialize account manager (one client per saved account)
     account_manager = AccountManager(app_settings.vinted_base_url)

@@ -69,9 +69,14 @@ class ItemPoller:
                 self._consecutive_errors = 0
             except VintedAuthError as e:
                 self._consecutive_errors += 1
-                await self._log("error", f"Authentication error: {e}. Please update cookies.", "auth")
-                await self.ws.broadcast_auth_error(str(e))
-                await asyncio.sleep(60)
+                await self._log("warn", f"Session Vinted expirée, réinitialisation...", "auth")
+                # Try to re-init anonymous session before giving up
+                try:
+                    await self.client.fetch_csrf_token()
+                    await self._log("info", "Session Vinted réinitialisée.", "auth")
+                except Exception:
+                    await self.ws.broadcast_auth_error(str(e))
+                await asyncio.sleep(10)
             except VintedRateLimitError as e:
                 self._consecutive_errors += 1
                 self.rate_limiter.on_rate_limited(e.retry_after)
@@ -98,10 +103,6 @@ class ItemPoller:
             poll_ms_row = await db.execute(select(Setting).where(Setting.key == "poll_interval_ms"))
             poll_ms_setting = poll_ms_row.scalar_one_or_none()
             poll_interval = int(poll_ms_setting.value) / 1000 if poll_ms_setting and poll_ms_setting.value else 2.0
-
-        if not filters:
-            await asyncio.sleep(10)
-            return
 
         items = await fetch_newest_items(self.client, per_page=96)
 
