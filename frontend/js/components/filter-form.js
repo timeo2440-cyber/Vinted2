@@ -79,7 +79,7 @@ const filterForm = (() => {
           <div class="brand-dropdown hidden" id="ff-cat-dropdown"></div>
         </div>
         <div class="brand-tags" id="ff-cat-tags"></div>
-        <small>Laisser vide = toutes les catégories.</small>
+        <small>Cliquez sur l'input pour voir toutes les catégories. Plusieurs sélections possibles.</small>
       </div>
 
       <div class="form-group">
