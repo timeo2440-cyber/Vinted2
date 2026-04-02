@@ -4,16 +4,16 @@ bypassing Cloudflare bot detection transparently.
 """
 import random
 import asyncio
-import json as _json
 from typing import Optional
 from urllib.parse import unquote
 
 from curl_cffi.requests import AsyncSession
-from curl_cffi.requests.exceptions import RequestsError
+from curl_cffi.requests.exceptions import RequestException, ConnectionError as CurlConnectionError, Timeout as CurlTimeout
+from curl_cffi.curl import CurlError
 
 from vinted.exceptions import VintedAuthError, VintedRateLimitError, VintedNetworkError
 
-# Use realistic recent Chrome versions
+# Rotate between recent Chrome versions
 CHROME_VERSIONS = ["chrome120", "chrome124", "chrome131"]
 
 
@@ -32,7 +32,6 @@ class VintedClient:
             verify=True,
             timeout=20,
         )
-        # Apply any saved cookies
         for name, value in self._cookies.items():
             session.cookies.set(name, value, domain=".vinted.fr")
         return session
@@ -62,7 +61,6 @@ class VintedClient:
     async def request(self, method: str, path: str, **kwargs) -> dict:
         await self._ensure_session()
 
-        # Small jitter — looks more human
         await asyncio.sleep(random.uniform(0.05, 0.3))
 
         url = f"{self.api_base}{path}" if path.startswith("/") else path
@@ -75,19 +73,13 @@ class VintedClient:
         if self._csrf_token:
             headers["X-CSRF-Token"] = self._csrf_token
 
-        # curl_cffi passes json via `json=` kwarg but needs Content-Type set manually
-        payload = kwargs.pop("json", None)
-        if payload is not None:
-            kwargs["data"] = _json.dumps(payload)
-            headers["Content-Type"] = "application/json"
-
         try:
             response = await self._session.request(
                 method, url,
                 headers=headers,
                 **kwargs,
             )
-        except RequestsError as e:
+        except (CurlError, RequestException, CurlConnectionError, CurlTimeout) as e:
             raise VintedNetworkError(f"Request error: {e}") from e
         except Exception as e:
             raise VintedNetworkError(f"Unexpected error: {e}") from e
@@ -118,8 +110,8 @@ class VintedClient:
 
     async def fetch_csrf_token(self) -> Optional[str]:
         """
-        Load Vinted homepage to obtain session cookies + CSRF token.
-        curl_cffi automatically passes Cloudflare JS challenges.
+        Load Vinted homepage to get session cookies + CSRF token.
+        curl_cffi automatically passes Cloudflare JS challenges via Chrome TLS fingerprint.
         """
         await self._ensure_session()
         try:
@@ -145,7 +137,7 @@ class VintedClient:
                     self._csrf_token = unquote(raw)
                     return self._csrf_token
 
-            # Priority 3: hit the JSON API directly to get CSRF
+            # Priority 3: API endpoint
             try:
                 api_resp = await self._session.get(
                     f"{self.api_base}/oauth/token_info",
@@ -155,15 +147,6 @@ class VintedClient:
                 if t:
                     self._csrf_token = t
                     return self._csrf_token
-                # Try parsing JSON for token
-                try:
-                    data = api_resp.json()
-                    t = data.get("csrf_token") or data.get("token")
-                    if t:
-                        self._csrf_token = t
-                        return self._csrf_token
-                except Exception:
-                    pass
             except Exception:
                 pass
 
