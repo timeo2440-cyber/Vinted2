@@ -1,6 +1,7 @@
+import secrets
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase, mapped_column, Mapped
-from sqlalchemy import Integer, String, Boolean, Float, DateTime, Text, func
+from sqlalchemy import Integer, String, Boolean, Float, DateTime, Text, ForeignKey, func
 from config import settings
 from pathlib import Path
 
@@ -15,10 +16,47 @@ class Base(DeclarativeBase):
     pass
 
 
+# ── Plans & limits ────────────────────────────────────────────────────────────
+PLAN_LIMITS = {
+    "free":      {"max_accounts": 2,   "max_filters": 3,   "auto_buy": False},
+    "pro":       {"max_accounts": 10,  "max_filters": 20,  "auto_buy": True},
+    "unlimited": {"max_accounts": 999, "max_filters": 999, "auto_buy": True},
+}
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(300), nullable=False, unique=True)
+    password_hash: Mapped[str] = mapped_column(String(500), nullable=False)
+    role: Mapped[str] = mapped_column(String(50), default="user")        # user / admin
+    plan: Mapped[str] = mapped_column(String(50), default="free")        # free / pro / unlimited
+    plan_expires_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+
+
+class LicenseKey(Base):
+    __tablename__ = "license_keys"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    plan: Mapped[str] = mapped_column(String(50), nullable=False)        # pro / unlimited
+    duration_days: Mapped[int] = mapped_column(Integer, default=30)
+    used_by_user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+    used_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+
+    @staticmethod
+    def generate() -> str:
+        return secrets.token_urlsafe(32)
+
+
 class Filter(Base):
     __tablename__ = "filters"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     auto_buy: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -57,12 +95,13 @@ class Purchase(Base):
     __tablename__ = "purchases"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     filter_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    account_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # which account made the purchase
+    account_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     vinted_item_id: Mapped[str] = mapped_column(String(100), nullable=False)
     item_title: Mapped[str | None] = mapped_column(String(500))
     price: Mapped[float | None] = mapped_column(Float)
-    status: Mapped[str] = mapped_column(String(50), nullable=False)  # pending/success/failed/skipped
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
     error_message: Mapped[str | None] = mapped_column(Text)
     attempted_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
     completed_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
@@ -76,10 +115,21 @@ class Setting(Base):
     updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
+class UserSetting(Base):
+    """Per-user settings (autocop, max_buy_per_hour, etc.)"""
+    __tablename__ = "user_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    key: Mapped[str] = mapped_column(String(100), nullable=False)
+    value: Mapped[str | None] = mapped_column(Text)
+
+
 class ActivityLog(Base):
     __tablename__ = "activity_log"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     level: Mapped[str] = mapped_column(String(20), default="info")
     category: Mapped[str | None] = mapped_column(String(50))
     message: Mapped[str] = mapped_column(Text, nullable=False)
@@ -91,12 +141,13 @@ class Account(Base):
     __tablename__ = "accounts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    email: Mapped[str] = mapped_column(String(300), nullable=False, unique=True)
-    password_enc: Mapped[str | None] = mapped_column(Text, nullable=True)  # base64-encoded password
+    email: Mapped[str] = mapped_column(String(300), nullable=False)
+    password_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Vinted session
-    cookies: Mapped[str | None] = mapped_column(Text, nullable=True)        # JSON string
+    cookies: Mapped[str | None] = mapped_column(Text, nullable=True)
     csrf_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
     vinted_user_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     vinted_username: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -104,8 +155,8 @@ class Account(Base):
     last_login: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
 
     # Shipping preferences
-    default_address: Mapped[str | None] = mapped_column(Text, nullable=True)         # JSON
-    preferred_pickup_points: Mapped[str | None] = mapped_column(Text, nullable=True) # JSON list of strings
+    default_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preferred_pickup_points: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -119,7 +170,7 @@ class Account(Base):
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    # Insert default settings if not present
+    # Insert default global settings if not present
     async with AsyncSessionLocal() as session:
         from sqlalchemy import select
         defaults = {

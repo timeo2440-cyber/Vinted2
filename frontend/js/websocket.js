@@ -50,7 +50,8 @@ const wsClient = (() => {
 
   function connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/ws`;
+    const token = auth.getToken ? auth.getToken() : '';
+    const url = `${proto}://${location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`;
 
     try { ws = new WebSocket(url); } catch { scheduleReconnect(); return; }
 

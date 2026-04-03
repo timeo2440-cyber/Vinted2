@@ -3,8 +3,9 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from database import get_db, Setting, Purchase, ActivityLog
+from database import get_db, Setting, UserSetting, Purchase, ActivityLog, User
 from datetime import datetime, timezone
+from auth_deps import get_current_user
 
 router = APIRouter(prefix="/api/bot", tags=["bot"])
 
@@ -15,48 +16,73 @@ async def _get_setting(db, key: str, default: str = "") -> str:
     return row.value if row and row.value else default
 
 
-async def _set_setting(db, key: str, value: str) -> None:
-    row = await db.get(Setting, key)
+async def _get_user_setting(db, user_id: int, key: str, default: str = "") -> str:
+    result = await db.execute(
+        select(UserSetting).where(UserSetting.user_id == user_id, UserSetting.key == key)
+    )
+    row = result.scalar_one_or_none()
+    return row.value if row and row.value else default
+
+
+async def _set_user_setting(db, user_id: int, key: str, value: str) -> None:
+    result = await db.execute(
+        select(UserSetting).where(UserSetting.user_id == user_id, UserSetting.key == key)
+    )
+    row = result.scalar_one_or_none()
     if row:
         row.value = value
     else:
-        db.add(Setting(key=key, value=value))
+        db.add(UserSetting(user_id=user_id, key=key, value=value))
     await db.commit()
 
 
 @router.get("/status")
-async def bot_status(request: Request, db: AsyncSession = Depends(get_db)):
+async def bot_status(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     poller = request.app.state.poller
     status = await poller.get_status()
-    from vinted.auth import validate_session
-    client = request.app.state.vinted_client
-    auth = await validate_session(client)
-    status["authenticated"] = auth["authenticated"]
-    status["username"] = auth.get("username")
     status["ws_connections"] = request.app.state.ws_manager.connection_count
-    # Include global autocop state
-    autocop_val = await _get_setting(db, "global_autocop", "false")
+    # Per-user autocop state
+    autocop_val = await _get_user_setting(db, user.id, "autocop", "false")
     status["autocop_enabled"] = autocop_val.lower() == "true"
     return status
 
 
 @router.get("/autocop")
-async def get_autocop(db: AsyncSession = Depends(get_db)):
-    val = await _get_setting(db, "global_autocop", "false")
+async def get_autocop(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    val = await _get_user_setting(db, user.id, "autocop", "false")
     return {"autocop_enabled": val.lower() == "true"}
 
 
 @router.post("/autocop")
-async def set_autocop(request: Request, db: AsyncSession = Depends(get_db)):
+async def set_autocop(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    # Check plan allows auto_buy
+    from database import PLAN_LIMITS
+    if not PLAN_LIMITS.get(user.plan, {}).get("auto_buy", False):
+        from fastapi import HTTPException
+        raise HTTPException(403, "L'Autocop nécessite le plan Pro ou supérieur")
+
     body = await request.json()
     enabled = bool(body.get("enabled", False))
-    await _set_setting(db, "global_autocop", "true" if enabled else "false")
+    await _set_user_setting(db, user.id, "autocop", "true" if enabled else "false")
     return {"autocop_enabled": enabled}
 
 
-# Keep start/stop for emergency use (not shown in UI)
 @router.post("/start")
-async def start_bot(request: Request):
+async def start_bot(request: Request, user: User = Depends(get_current_user)):
+    if user.role != "admin":
+        from fastapi import HTTPException
+        raise HTTPException(403, "Admin uniquement")
     poller = request.app.state.poller
     if poller.running:
         return {"ok": True, "message": "Bot already running"}
@@ -65,7 +91,10 @@ async def start_bot(request: Request):
 
 
 @router.post("/stop")
-async def stop_bot(request: Request):
+async def stop_bot(request: Request, user: User = Depends(get_current_user)):
+    if user.role != "admin":
+        from fastapi import HTTPException
+        raise HTTPException(403, "Admin uniquement")
     poller = request.app.state.poller
     if not poller.running:
         return {"ok": True, "message": "Bot already stopped"}
@@ -81,31 +110,29 @@ class ManualBuyRequest(BaseModel):
 
 
 @router.post("/manual-buy")
-async def manual_buy(payload: ManualBuyRequest, request: Request, db: AsyncSession = Depends(get_db)):
-    """
-    Manually trigger purchase of a specific item.
-    Uses a random account client if available, else primary client.
-    """
+async def manual_buy(
+    payload: ManualBuyRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     from vinted.checkout import full_purchase_flow
     from database import AsyncSessionLocal
 
     account_manager = request.app.state.account_manager
-    primary_client  = request.app.state.vinted_client
+    primary_client = request.app.state.vinted_client
 
-    # Pick client
+    # Use this user's accounts
     account_id = None
+    buy_client = primary_client
     if account_manager and account_manager.has_clients():
-        pair = account_manager.get_random_client()
+        pair = account_manager.get_random_client_for_user(user.id)
         if pair:
             account_id, buy_client = pair
-        else:
-            buy_client = primary_client
-    else:
-        buy_client = primary_client
 
-    # Record purchase attempt
     async with AsyncSessionLocal() as adb:
         purchase = Purchase(
+            user_id=user.id,
             filter_id=None,
             account_id=account_id,
             vinted_item_id=payload.id,
@@ -131,6 +158,7 @@ async def manual_buy(payload: ManualBuyRequest, request: Request, db: AsyncSessi
             await adb.commit()
 
         log = ActivityLog(
+            user_id=user.id,
             level="success" if result.success else "error",
             category="buy",
             message=(
@@ -143,11 +171,11 @@ async def manual_buy(payload: ManualBuyRequest, request: Request, db: AsyncSessi
         await adb.commit()
 
     ws = request.app.state.ws_manager
-    await ws.broadcast_buy_result(
-        item_id=payload.id,
-        success=result.success,
-        price=result.price_paid,
-        error=result.error,
-    )
+    await ws.send_to_user(user.id, "buy_result", {
+        "item_id": payload.id,
+        "status": "success" if result.success else "failed",
+        "price": result.price_paid,
+        "error": result.error,
+    })
 
     return {"success": result.success, "error": result.error, "price_paid": result.price_paid}
