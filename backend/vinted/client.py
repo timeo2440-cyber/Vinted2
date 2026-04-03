@@ -85,6 +85,17 @@ class VintedClient:
             raise VintedNetworkError(f"Unexpected error: {e}") from e
 
         if response.status_code in (401, 403):
+            # Distinguish real Vinted auth errors from Cloudflare blocks.
+            # Cloudflare returns HTML; Vinted returns JSON.
+            content_type = response.headers.get("Content-Type", "")
+            body_text = response.text or ""
+            is_cloudflare = (
+                "text/html" in content_type
+                or "<html" in body_text[:200].lower()
+                or "cloudflare" in body_text[:500].lower()
+            )
+            if is_cloudflare:
+                raise VintedNetworkError(f"Cloudflare block: {response.status_code}")
             raise VintedAuthError(f"Authentication failed: {response.status_code}")
 
         if response.status_code == 429:
