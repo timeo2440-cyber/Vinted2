@@ -73,8 +73,12 @@ async def create_account(body: AccountCreate, request: Request, user: User = Dep
         if existing.scalar_one_or_none():
             raise HTTPException(400, "Un compte avec cet email existe déjà")
 
+    # Try auto-login but don't block account creation if it fails (Cloudflare blocks it)
     from config import settings as app_settings
-    login_result = await login_with_credentials(app_settings.vinted_base_url, body.email, body.password)
+    try:
+        login_result = await login_with_credentials(app_settings.vinted_base_url, body.email, body.password)
+    except Exception:
+        login_result = {"success": False, "error": "Connexion automatique échouée — collez vos cookies manuellement"}
 
     password_enc = base64.b64encode(body.password.encode()).decode()
 
@@ -88,20 +92,21 @@ async def create_account(body: AccountCreate, request: Request, user: User = Dep
             csrf_token=login_result.get("csrf_token") if login_result["success"] else None,
             vinted_user_id=login_result.get("user_id"),
             vinted_username=login_result.get("username"),
-            is_authenticated=login_result["success"],
-            last_login=datetime.now(timezone.utc) if login_result["success"] else None,
+            # Toujours marquer comme actif — l'utilisateur collera ses cookies si besoin
+            is_authenticated=True,
+            last_login=datetime.now(timezone.utc),
         )
         db.add(account)
         await db.commit()
         await db.refresh(account)
 
         mgr = getattr(request.app.state, "account_manager", None)
-        if mgr and login_result["success"]:
+        if mgr:
             await mgr.refresh_account(account.id)
 
         resp = _serialize(account)
         if not login_result["success"]:
-            resp["login_error"] = login_result.get("error", "Connexion échouée — utilisez les cookies manuels")
+            resp["login_warning"] = login_result.get("error", "Connexion automatique échouée — collez vos cookies manuellement")
         return resp
 
 
