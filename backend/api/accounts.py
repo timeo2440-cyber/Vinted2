@@ -188,50 +188,29 @@ async def set_account_cookies(account_id: int, body: CookiesBody, request: Reque
         if not account:
             raise HTTPException(404, "Compte introuvable")
 
-        from config import settings as app_settings
         cookies = parse_cookie_string(body.cookies)
         if not cookies:
             raise HTTPException(400, "Cookies invalides")
 
-        client = VintedClient(app_settings.vinted_base_url)
-        await client.__aenter__()
-        try:
-            # Apply user's cookies first — do NOT call fetch_csrf_token()
-            # because fetching the homepage returns anonymous Set-Cookie headers
-            # that would overwrite the valid authenticated cookies.
-            client.set_cookies(cookies)
+        # Extract CSRF token directly from the provided cookies (no network call)
+        csrf = _unquote(cookies.get("XSRF-TOKEN") or cookies.get("xsrf-token") or "")
 
-            # Extract CSRF token directly from provided cookies (no network call)
-            csrf = _unquote(cookies.get("XSRF-TOKEN") or cookies.get("xsrf-token") or "")
-            if csrf:
-                client.set_csrf_token(csrf)
-
-            # Validate session against Vinted API
-            session_info = await validate_session(client)
-
-            # authenticated=True  → valid session confirmed
-            # authenticated=None  → network error, give benefit of the doubt
-            # authenticated=False → real 401/403, cookies are genuinely invalid
-            validated = session_info.get("authenticated")
-            is_auth = validated if validated is not None else True
-
-            account.cookies = json.dumps(cookies)
-            account.csrf_token = csrf or client._csrf_token
-            account.is_authenticated = is_auth
-            if is_auth:
-                account.vinted_user_id = session_info.get("user_id") or account.vinted_user_id
-                account.vinted_username = session_info.get("username") or account.vinted_username
-                account.last_login = datetime.now(timezone.utc)
-            await db.commit()
-            await db.refresh(account)
-        finally:
-            await client.__aexit__(None, None, None)
+        # Trust the user's cookies unconditionally — no validation call.
+        # Cloudflare often blocks the validation request with 403 even when the
+        # cookies are perfectly valid, which would wrongly mark the account as Expiré.
+        # The user can click "Vérifier" later to run a live session check.
+        account.cookies = json.dumps(cookies)
+        account.csrf_token = csrf or ""
+        account.is_authenticated = True
+        account.last_login = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(account)
 
     mgr = getattr(request.app.state, "account_manager", None)
     if mgr:
         await mgr.refresh_account(account_id)
     result = _serialize(account)
-    result["validation_reason"] = session_info.get("reason")
+    result["validation_reason"] = "trusted"
     return result
 
 
