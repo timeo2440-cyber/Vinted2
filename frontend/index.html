@@ -7,10 +7,40 @@
   <link rel="stylesheet" href="/static/css/main.css" />
   <link rel="stylesheet" href="/static/css/components.css" />
   <link rel="stylesheet" href="/static/css/accounts.css" />
+  <link rel="stylesheet" href="/static/css/auth.css" />
 </head>
 <body>
+
+  <!-- ── Login overlay ─────────────────────────────────────────────────────── -->
+  <div id="login-overlay" class="hidden">
+    <div class="login-box">
+      <div class="login-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="28" height="28"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span>Vinted<strong>Bot</strong></span>
+      </div>
+      <div class="login-tabs">
+        <button class="login-tab active" data-tab="login">Connexion</button>
+        <button class="login-tab" data-tab="register">Créer un compte</button>
+      </div>
+      <div id="login-form-login" class="login-form">
+        <input type="email" id="login-email" class="input-field" placeholder="votre@email.com" autocomplete="email" />
+        <input type="password" id="login-password" class="input-field" placeholder="Mot de passe" autocomplete="current-password" />
+        <div id="login-error" class="login-error"></div>
+        <button id="login-btn" class="login-submit">Se connecter</button>
+      </div>
+      <div id="login-form-register" class="login-form hidden">
+        <input type="email" id="register-email" class="input-field" placeholder="votre@email.com" autocomplete="email" />
+        <input type="password" id="register-password" class="input-field" placeholder="Mot de passe (min 6 car.)" autocomplete="new-password" />
+        <div id="register-error" class="login-error"></div>
+        <button id="register-btn" class="login-submit">Créer le compte</button>
+        <p style="font-size:11px;color:#475569;text-align:center;margin-top:4px">Le premier compte créé devient administrateur.</p>
+      </div>
+      <div class="login-footer">Vinted AutoBot — usage commercial</div>
+    </div>
+  </div>
+
+  <!-- ── Main app ───────────────────────────────────────────────────────────── -->
   <div id="app">
-    <!-- Sidebar -->
     <aside id="sidebar">
       <div class="sidebar-header">
         <div class="logo">
@@ -19,7 +49,6 @@
         </div>
         <div id="ws-indicator" class="ws-dot disconnected" title="WebSocket"></div>
       </div>
-
       <nav class="sidebar-nav">
         <a href="#dashboard" class="nav-link active" data-view="dashboard">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -27,13 +56,11 @@
         </a>
         <a href="#filters" class="nav-link" data-view="filters">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-          Filtres
-          <span id="filter-badge" class="badge hidden">0</span>
+          Filtres <span id="filter-badge" class="badge hidden">0</span>
         </a>
         <a href="#accounts" class="nav-link" data-view="accounts">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          Comptes
-          <span id="accounts-badge" class="badge hidden">0</span>
+          Comptes <span id="accounts-badge" class="badge hidden">0</span>
         </a>
         <a href="#history" class="nav-link" data-view="history">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="12 8 12 12 14 14"/><path d="M3.05 11a9 9 0 1 0 .5-4.5"/><polyline points="3 3 3 9 9 9"/></svg>
@@ -47,19 +74,17 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           Paramètres
         </a>
+        <a href="#admin" class="nav-link hidden" id="admin-nav-link" data-view="admin">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Admin
+        </a>
       </nav>
-
       <div class="sidebar-footer">
-        <div id="auth-status-badge" class="auth-badge offline">
-          <span class="auth-dot"></span>
-          <span id="auth-label">Non connecté</span>
-        </div>
+        <div id="user-menu-slot"></div>
       </div>
     </aside>
 
-    <!-- Main content -->
     <main id="main">
-      <!-- Top bar -->
       <header id="topbar">
         <div class="topbar-left">
           <h1 id="page-title">Dashboard</h1>
@@ -72,15 +97,14 @@
         </div>
         <div class="topbar-right">
           <div class="bot-live-badge" id="bot-live-badge" title="Bot en direct 24/7">
-            <span class="live-dot"></span>
-            <span>En direct</span>
+            <span class="live-dot"></span><span>En direct</span>
           </div>
-          <button id="sound-toggle" class="sound-toggle-btn" title="Son désactivé">
+          <button id="sound-toggle" class="sound-toggle-btn" title="Son">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
           </button>
           <div id="autocop-wrap">
             <span id="autocop-label" class="autocop-label off">Autocop OFF</span>
-            <label class="toggle-switch autocop-toggle" title="Activer/Désactiver l'achat automatique">
+            <label class="toggle-switch autocop-toggle">
               <input type="checkbox" id="autocop-toggle" />
               <span class="slider"></span>
             </label>
@@ -88,7 +112,6 @@
         </div>
       </header>
 
-      <!-- View container -->
       <div id="view-container">
         <!-- Dashboard -->
         <section id="view-dashboard" class="view active">
@@ -97,14 +120,8 @@
               <div class="feed-header">
                 <h2>Flux en direct</h2>
                 <div class="feed-controls">
-                  <label class="mini-toggle">
-                    <input type="checkbox" id="pause-feed" />
-                    <span>Pause</span>
-                  </label>
-                  <label class="mini-toggle">
-                    <input type="checkbox" id="matched-only-toggle" />
-                    <span>Matchés</span>
-                  </label>
+                  <label class="mini-toggle"><input type="checkbox" id="pause-feed" /><span>Pause</span></label>
+                  <label class="mini-toggle"><input type="checkbox" id="matched-only-toggle" /><span>Matchés</span></label>
                   <button id="clear-feed" class="btn-ghost btn-sm">Vider</button>
                 </div>
               </div>
@@ -151,35 +168,23 @@
               Ajouter un compte
             </button>
           </div>
-          <p class="help-text">Ajoutez plusieurs comptes Vinted pour répartir les achats et éviter les bans. Le bot alternera automatiquement entre les comptes actifs et connectés.</p>
+          <p class="help-text">Ajoutez vos comptes Vinted. Le bot alternera entre les comptes actifs pour les achats automatiques.</p>
           <div id="accounts-list" class="accounts-grid"></div>
           <div class="empty-state hidden" id="accounts-empty">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <p>Aucun compte configuré.<br/><small>Ajoutez vos comptes Vinted pour activer l'achat automatique.</small></p>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            <p>Aucun compte configuré.</p>
           </div>
         </section>
 
         <!-- History -->
         <section id="view-history" class="view">
-          <div class="view-header">
-            <h2>Historique des achats</h2>
-          </div>
+          <div class="view-header"><h2>Historique des achats</h2></div>
           <div id="history-table-wrap" class="table-wrap">
             <table id="history-table" class="data-table">
-              <thead>
-                <tr>
-                  <th>Article</th>
-                  <th>Prix</th>
-                  <th>Filtre</th>
-                  <th>Statut</th>
-                  <th>Date</th>
-                </tr>
-              </thead>
+              <thead><tr><th>Article</th><th>Prix</th><th>Filtre</th><th>Statut</th><th>Date</th></tr></thead>
               <tbody id="history-tbody"></tbody>
             </table>
-            <div class="empty-state" id="history-empty">
-              <p>Aucun achat enregistré.</p>
-            </div>
+            <div class="empty-state" id="history-empty"><p>Aucun achat enregistré.</p></div>
           </div>
         </section>
 
@@ -187,22 +192,10 @@
         <section id="view-stats" class="view">
           <div class="view-header"><h2>Statistiques</h2></div>
           <div class="stats-grid">
-            <div class="stat-card">
-              <div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div>
-              <div><div class="stat-value" id="s-total-seen">0</div><div class="stat-label">Articles vus</div></div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></div>
-              <div><div class="stat-value" id="s-matched">0</div><div class="stat-label">Matchés</div></div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div>
-              <div><div class="stat-value" id="s-bought">0</div><div class="stat-label">Achetés</div></div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-              <div><div class="stat-value" id="s-spend">0€</div><div class="stat-label">Dépensé (24h)</div></div>
-            </div>
+            <div class="stat-card"><div class="stat-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></div><div><div class="stat-value" id="s-total-seen">0</div><div class="stat-label">Articles vus</div></div></div>
+            <div class="stat-card"><div class="stat-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></div><div><div class="stat-value" id="s-matched">0</div><div class="stat-label">Matchés</div></div></div>
+            <div class="stat-card"><div class="stat-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div><div><div class="stat-value" id="s-bought">0</div><div class="stat-label">Achetés</div></div></div>
+            <div class="stat-card"><div class="stat-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><div class="stat-value" id="s-spend">0€</div><div class="stat-label">Dépensé (24h)</div></div></div>
           </div>
           <div class="chart-section">
             <h3>Articles vus (24 dernières heures)</h3>
@@ -216,43 +209,61 @@
           <div class="settings-grid">
             <div class="settings-card">
               <h3>Authentification Vinted (compte principal)</h3>
-              <p class="help-text">Copiez vos cookies depuis les outils de développement de votre navigateur (onglet Réseau → En-têtes de requête → Cookie). Ce compte est utilisé pour le polling.</p>
+              <p class="help-text">Collez vos cookies depuis les outils de développement (F12 → Réseau → Cookie).</p>
               <div id="auth-result" class="auth-result hidden"></div>
               <textarea id="cookie-input" class="cookie-textarea" placeholder="_vinted_fr_session=...; auth_t=..."></textarea>
               <div class="form-actions">
                 <button id="validate-cookies-btn" class="btn-primary">Valider les cookies</button>
                 <button id="check-auth-btn" class="btn-ghost">Vérifier le statut</button>
               </div>
-              <div id="auth-status-detail" class="auth-status-detail"></div>
             </div>
-
             <div class="settings-card">
               <h3>Paramètres du bot</h3>
               <div class="form-group">
-                <label>Intervalle de polling</label>
-                <div class="slider-row">
-                  <input type="range" id="poll-interval" min="1000" max="15000" step="500" value="2000" />
-                  <span id="poll-interval-label" class="slider-value">2s</span>
-                </div>
-                <small>Fréquence de vérification des nouveaux articles (2s = très rapide)</small>
-              </div>
-              <div class="form-group">
                 <label>Achats max / heure</label>
                 <input type="number" id="max-buy-hour" min="1" max="50" value="5" class="input-field" />
-                <small>Limite de sécurité globale</small>
+                <small>Limite de sécurité personnelle</small>
               </div>
               <button id="save-settings-btn" class="btn-primary">Sauvegarder</button>
             </div>
+            <div class="settings-card">
+              <h3>Mon abonnement</h3>
+              <div id="plan-info"></div>
+              <div class="form-group" style="margin-top:16px">
+                <label>Activer une clé de licence</label>
+                <div class="license-input-row">
+                  <input type="text" id="license-key-input" class="input-field" placeholder="Collez votre clé ici…" />
+                  <button id="activate-license-btn" class="btn-primary">Activer</button>
+                </div>
+              </div>
+            </div>
+            <div class="settings-card">
+              <h3>Mon compte</h3>
+              <div class="form-group">
+                <label>Changer le mot de passe</label>
+                <input type="password" id="old-pw" class="input-field" placeholder="Ancien mot de passe" style="margin-bottom:6px"/>
+                <input type="password" id="new-pw" class="input-field" placeholder="Nouveau mot de passe"/>
+              </div>
+              <button id="change-pw-btn" class="btn-ghost">Mettre à jour</button>
+            </div>
           </div>
+        </section>
+
+        <!-- Admin -->
+        <section id="view-admin" class="view">
+          <div class="view-header"><h2>Administration</h2></div>
+          <div id="admin-tabs" class="admin-tab-bar">
+            <button class="admin-tab-btn active" data-admin-tab="users">Utilisateurs</button>
+            <button class="admin-tab-btn" data-admin-tab="licenses">Licences</button>
+            <button class="admin-tab-btn" data-admin-tab="stats">Stats globales</button>
+          </div>
+          <div id="admin-body" class="admin-body"></div>
         </section>
       </div>
     </main>
   </div>
 
-  <!-- Toast container -->
   <div id="toast-container"></div>
-
-  <!-- Modal overlay -->
   <div id="modal-overlay" class="modal-overlay hidden">
     <div id="modal-box" class="modal-box">
       <div class="modal-header">
@@ -263,7 +274,8 @@
     </div>
   </div>
 
-  <!-- Scripts -->
+  <!-- auth.js MUST be first — api.js depends on auth.getToken() -->
+  <script src="/static/js/auth.js"></script>
   <script src="/static/js/store.js"></script>
   <script src="/static/js/api.js"></script>
   <script src="/static/js/websocket.js"></script>
@@ -278,6 +290,7 @@
   <script src="/static/js/views/history.js"></script>
   <script src="/static/js/views/stats.js"></script>
   <script src="/static/js/views/settings.js"></script>
+  <script src="/static/js/views/admin.js"></script>
   <script src="/static/js/app.js"></script>
 </body>
 </html>

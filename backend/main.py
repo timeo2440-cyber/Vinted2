@@ -1,17 +1,19 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from sqlalchemy import select
-from database import init_db, AsyncSessionLocal, Setting
+from sqlalchemy import select, update
+from database import init_db, AsyncSessionLocal, Setting, Account
 from vinted.client import VintedClient
 from vinted.auth import parse_cookie_string
 from vinted.account_manager import AccountManager
 from bot.poller import ItemPoller
 from ws.manager import ws_manager
 from api import filters, settings, bot_control, history, stats, logs, vinted_meta, accounts
+from api.auth import router as auth_router
+from api.admin import router as admin_router
 from config import settings as app_settings
 import os
 
@@ -23,14 +25,14 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # ── Startup ────────────────────────────────────────────────────────────────
     await init_db()
 
     # Build primary Vinted client (used for polling)
     client = VintedClient(app_settings.vinted_base_url)
     await client.__aenter__()
 
-    # Load saved cookies for primary client, then always fetch CSRF/anonymous session
+    # Load saved cookies for primary client
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Setting).where(Setting.key == "vinted_cookies"))
         row = result.scalar_one_or_none()
@@ -39,16 +41,11 @@ async def lifespan(app: FastAPI):
             if cookies:
                 client.set_cookies(cookies)
 
-    # Always initialize Vinted session (anonymous if no saved cookies)
-    # This fetches XSRF-TOKEN and sets anonymous session cookies
+    # Always fetch CSRF/anonymous session token
     await client.fetch_csrf_token()
 
-    # Auto-repair: any account with cookies stored but marked as expired → restore to authenticated.
-    # We trust saved cookies unconditionally; the user explicitly pasted them.
-    # Cloudflare often blocks session validation which wrongly marks accounts as expired.
+    # Auto-repair: any account that has cookies but is marked expired → restore to authenticated
     async with AsyncSessionLocal() as db:
-        from sqlalchemy import update
-        from database import Account
         await db.execute(
             update(Account)
             .where(Account.cookies != None, Account.cookies != "", Account.is_authenticated == False)
@@ -56,11 +53,11 @@ async def lifespan(app: FastAPI):
         )
         await db.commit()
 
-    # Initialize account manager (one client per saved account)
+    # Initialize per-user account clients
     account_manager = AccountManager(app_settings.vinted_base_url)
     await account_manager.initialize()
 
-    # Create poller (passes account_manager to BuyEngine for rotation)
+    # Create poller
     poller = ItemPoller(client, ws_manager, account_manager)
 
     # Store on app state
@@ -69,12 +66,12 @@ async def lifespan(app: FastAPI):
     app.state.ws_manager = ws_manager
     app.state.account_manager = account_manager
 
-    # Auto-start: the bot always runs 24/7
+    # Auto-start: bot always runs 24/7
     await poller.start()
 
     yield
 
-    # Shutdown
+    # ── Shutdown ───────────────────────────────────────────────────────────────
     await poller.stop()
     await account_manager.close_all()
     await client.__aexit__(None, None, None)
@@ -82,12 +79,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Vinted AutoBot",
-    description="Auto-buy bot for Vinted with real-time web interface",
-    version="1.0.0",
+    description="Auto-buy bot for Vinted — SaaS multi-tenant",
+    version="2.0.0",
     lifespan=lifespan,
 )
 
-# Register API routers
+# ── Routers ────────────────────────────────────────────────────────────────────
+app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(filters.router)
 app.include_router(settings.router)
 app.include_router(bot_control.router)
@@ -98,9 +97,26 @@ app.include_router(vinted_meta.router)
 app.include_router(accounts.router)
 
 
+# ── WebSocket ──────────────────────────────────────────────────────────────────
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await ws_manager.connect(websocket)
+async def websocket_endpoint(
+    websocket: WebSocket,
+    token: str = Query(default=""),
+):
+    """
+    Authenticated WebSocket.
+    Client sends ?token=<jwt> so we can route events to the right user.
+    """
+    user_id = None
+    if token:
+        try:
+            import jwt as _jwt
+            payload = _jwt.decode(token, app_settings.secret_key, algorithms=["HS256"])
+            user_id = int(payload["sub"])
+        except Exception:
+            user_id = None
+
+    await ws_manager.connect(websocket, user_id=user_id)
     try:
         poller: ItemPoller = websocket.app.state.poller
         status = await poller.get_status()
@@ -120,10 +136,10 @@ async def websocket_endpoint(websocket: WebSocket):
     except Exception:
         pass
     finally:
-        ws_manager.disconnect(websocket)
+        ws_manager.disconnect(websocket, user_id=user_id)
 
 
-# Serve frontend static files
+# ── Static / SPA ───────────────────────────────────────────────────────────────
 frontend_dir = app_settings.frontend_dir
 if os.path.isdir(frontend_dir):
     app.mount("/static", StaticFiles(directory=frontend_dir), name="static")

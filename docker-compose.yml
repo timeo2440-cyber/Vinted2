@@ -6,8 +6,11 @@ services:
     ports:
       - "80:8000"        # Accès via http://localhost (sans port)
     volumes:
-      - ./data:/app/data  # Persistance de la base de données
+      - ./data:/app/data  # Persistance de la base de données SQLite
     restart: unless-stopped
     environment:
       - DATABASE_URL=sqlite+aiosqlite:////app/data/vinted_bot.db
       - FRONTEND_DIR=/app/frontend
+      # ⚠️  OBLIGATOIRE : changez cette clé en production !
+      - SECRET_KEY=change-me-in-production-use-a-long-random-string
+      - VINTED_BASE_URL=https://www.vinted.fr

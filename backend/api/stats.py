@@ -2,33 +2,49 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select, func as sa_func
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone, timedelta
-from database import get_db, SeenItem, Purchase
+from database import get_db, SeenItem, Purchase, User
+from auth_deps import get_current_user
 
 router = APIRouter(prefix="/api/stats", tags=["stats"])
 
 
 @router.get("/summary")
-async def get_summary(db: AsyncSession = Depends(get_db)):
+async def get_summary(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     now = datetime.now(timezone.utc)
     cutoff_24h = now - timedelta(hours=24)
     cutoff_1h = now - timedelta(hours=1)
 
+    # Global seen items (shared feed)
     total_seen = (await db.execute(select(sa_func.count(SeenItem.id)))).scalar() or 0
-    total_purchases = (await db.execute(select(sa_func.count(Purchase.id)))).scalar() or 0
+
+    # Per-user purchases
+    total_purchases = (await db.execute(
+        select(sa_func.count(Purchase.id)).where(Purchase.user_id == user.id)
+    )).scalar() or 0
     successful = (await db.execute(
-        select(sa_func.count(Purchase.id)).where(Purchase.status == "success")
+        select(sa_func.count(Purchase.id)).where(
+            Purchase.user_id == user.id, Purchase.status == "success"
+        )
     )).scalar() or 0
     failed = (await db.execute(
-        select(sa_func.count(Purchase.id)).where(Purchase.status == "failed")
+        select(sa_func.count(Purchase.id)).where(
+            Purchase.user_id == user.id, Purchase.status == "failed"
+        )
     )).scalar() or 0
 
     total_spend_row = await db.execute(
-        select(sa_func.sum(Purchase.price)).where(Purchase.status == "success")
+        select(sa_func.sum(Purchase.price)).where(
+            Purchase.user_id == user.id, Purchase.status == "success"
+        )
     )
     total_spend = total_spend_row.scalar() or 0.0
 
     spend_24h_row = await db.execute(
         select(sa_func.sum(Purchase.price)).where(
+            Purchase.user_id == user.id,
             Purchase.status == "success",
             Purchase.attempted_at >= cutoff_24h,
         )
@@ -52,8 +68,10 @@ async def get_summary(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/timeline")
-async def get_timeline(db: AsyncSession = Depends(get_db)):
-    """Return item counts per hour for the last 24 hours."""
+async def get_timeline(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     now = datetime.now(timezone.utc)
     result = await db.execute(
         select(SeenItem.first_seen_at).where(
@@ -62,7 +80,6 @@ async def get_timeline(db: AsyncSession = Depends(get_db)):
     )
     timestamps = [row for row in result.scalars()]
 
-    # Bucket into hours
     buckets: dict[int, int] = {}
     for ts in timestamps:
         if ts:
@@ -70,7 +87,6 @@ async def get_timeline(db: AsyncSession = Depends(get_db)):
             hour_ts = int(hour.timestamp()) if hasattr(hour, 'timestamp') else 0
             buckets[hour_ts] = buckets.get(hour_ts, 0) + 1
 
-    # Fill missing hours with 0
     timeline = []
     for i in range(23, -1, -1):
         hour = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=i)

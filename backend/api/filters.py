@@ -2,9 +2,10 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from database import get_db, Filter, SeenItem
+from database import get_db, Filter, SeenItem, User
 from models import FilterCreate, FilterUpdate, FilterOut
 from bot.filter_engine import FilterEngine
+from auth_deps import get_current_user, check_plan_limit
 
 router = APIRouter(prefix="/api/filters", tags=["filters"])
 _engine = FilterEngine()
@@ -52,16 +53,45 @@ def _apply_filter_data(f: Filter, data: dict) -> None:
 
 
 @router.get("", response_model=list[FilterOut])
-async def list_filters(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Filter).order_by(Filter.created_at))
+async def list_filters(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    result = await db.execute(
+        select(Filter).where(Filter.user_id == user.id).order_by(Filter.created_at)
+    )
     return [_serialize_filter(f) for f in result.scalars()]
 
 
 @router.post("", response_model=FilterOut, status_code=201)
-async def create_filter(payload: FilterCreate, db: AsyncSession = Depends(get_db)):
-    f = Filter(name=payload.name, enabled=payload.enabled, auto_buy=payload.auto_buy,
-               max_budget=payload.max_budget, keywords=payload.keywords,
-               price_min=payload.price_min, price_max=payload.price_max)
+async def create_filter(
+    payload: FilterCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    # Check plan limits
+    count_result = await db.execute(
+        select(Filter).where(Filter.user_id == user.id)
+    )
+    current_count = len(count_result.scalars().all())
+    check_plan_limit(user, "filters", current_count)
+
+    # Check auto_buy permission
+    if payload.auto_buy:
+        from database import PLAN_LIMITS
+        if not PLAN_LIMITS.get(user.plan, {}).get("auto_buy", False):
+            raise HTTPException(403, "L'achat automatique nécessite le plan Pro ou supérieur")
+
+    f = Filter(
+        user_id=user.id,
+        name=payload.name,
+        enabled=payload.enabled,
+        auto_buy=payload.auto_buy,
+        max_budget=payload.max_budget,
+        keywords=payload.keywords,
+        price_min=payload.price_min,
+        price_max=payload.price_max,
+    )
     for list_field in ["category_ids", "brand_ids", "size_ids", "conditions", "country_codes"]:
         val = getattr(payload, list_field)
         setattr(f, list_field, json.dumps(val) if val is not None else None)
@@ -72,18 +102,31 @@ async def create_filter(payload: FilterCreate, db: AsyncSession = Depends(get_db
 
 
 @router.get("/{filter_id}", response_model=FilterOut)
-async def get_filter(filter_id: int, db: AsyncSession = Depends(get_db)):
+async def get_filter(
+    filter_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     f = await db.get(Filter, filter_id)
-    if not f:
-        raise HTTPException(404, "Filter not found")
+    if not f or f.user_id != user.id:
+        raise HTTPException(404, "Filtre introuvable")
     return _serialize_filter(f)
 
 
 @router.put("/{filter_id}", response_model=FilterOut)
-async def replace_filter(filter_id: int, payload: FilterCreate, db: AsyncSession = Depends(get_db)):
+async def replace_filter(
+    filter_id: int,
+    payload: FilterCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     f = await db.get(Filter, filter_id)
-    if not f:
-        raise HTTPException(404, "Filter not found")
+    if not f or f.user_id != user.id:
+        raise HTTPException(404, "Filtre introuvable")
+    if payload.auto_buy:
+        from database import PLAN_LIMITS
+        if not PLAN_LIMITS.get(user.plan, {}).get("auto_buy", False):
+            raise HTTPException(403, "L'achat automatique nécessite le plan Pro ou supérieur")
     _apply_filter_data(f, payload.model_dump())
     await db.commit()
     await db.refresh(f)
@@ -91,31 +134,48 @@ async def replace_filter(filter_id: int, payload: FilterCreate, db: AsyncSession
 
 
 @router.patch("/{filter_id}", response_model=FilterOut)
-async def update_filter(filter_id: int, payload: FilterUpdate, db: AsyncSession = Depends(get_db)):
+async def update_filter(
+    filter_id: int,
+    payload: FilterUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     f = await db.get(Filter, filter_id)
-    if not f:
-        raise HTTPException(404, "Filter not found")
-    _apply_filter_data(f, payload.model_dump(exclude_unset=True))
+    if not f or f.user_id != user.id:
+        raise HTTPException(404, "Filtre introuvable")
+    data = payload.model_dump(exclude_unset=True)
+    if data.get("auto_buy"):
+        from database import PLAN_LIMITS
+        if not PLAN_LIMITS.get(user.plan, {}).get("auto_buy", False):
+            raise HTTPException(403, "L'achat automatique nécessite le plan Pro ou supérieur")
+    _apply_filter_data(f, data)
     await db.commit()
     await db.refresh(f)
     return _serialize_filter(f)
 
 
 @router.delete("/{filter_id}", status_code=204)
-async def delete_filter(filter_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_filter(
+    filter_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     f = await db.get(Filter, filter_id)
-    if not f:
-        raise HTTPException(404, "Filter not found")
+    if not f or f.user_id != user.id:
+        raise HTTPException(404, "Filtre introuvable")
     await db.delete(f)
     await db.commit()
 
 
 @router.post("/{filter_id}/test")
-async def test_filter(filter_id: int, db: AsyncSession = Depends(get_db)):
-    """Test a filter against the last 200 seen items."""
+async def test_filter(
+    filter_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     f = await db.get(Filter, filter_id)
-    if not f:
-        raise HTTPException(404, "Filter not found")
+    if not f or f.user_id != user.id:
+        raise HTTPException(404, "Filtre introuvable")
 
     result = await db.execute(
         select(SeenItem).order_by(SeenItem.first_seen_at.desc()).limit(200)

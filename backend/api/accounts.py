@@ -2,12 +2,13 @@ import json
 import base64
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy import select
-from database import AsyncSessionLocal, Account
+from database import AsyncSessionLocal, Account, User
 from vinted.auth import login_with_credentials, validate_session, parse_cookie_string
 from vinted.client import VintedClient
+from auth_deps import get_current_user, check_plan_limit
 
 router = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -49,16 +50,26 @@ def _serialize(account: Account) -> dict:
 
 
 @router.get("")
-async def list_accounts():
+async def list_accounts(user: User = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Account).order_by(Account.created_at.desc()))
+        result = await db.execute(
+            select(Account).where(Account.user_id == user.id).order_by(Account.created_at.desc())
+        )
         return [_serialize(a) for a in result.scalars().all()]
 
 
 @router.post("")
-async def create_account(body: AccountCreate, request: Request):
+async def create_account(body: AccountCreate, request: Request, user: User = Depends(get_current_user)):
+    # Check plan limits
     async with AsyncSessionLocal() as db:
-        existing = await db.execute(select(Account).where(Account.email == body.email))
+        count_res = await db.execute(select(Account).where(Account.user_id == user.id))
+        current_count = len(count_res.scalars().all())
+    check_plan_limit(user, "accounts", current_count)
+
+    async with AsyncSessionLocal() as db:
+        existing = await db.execute(
+            select(Account).where(Account.email == body.email, Account.user_id == user.id)
+        )
         if existing.scalar_one_or_none():
             raise HTTPException(400, "Un compte avec cet email existe déjà")
 
@@ -69,6 +80,7 @@ async def create_account(body: AccountCreate, request: Request):
 
     async with AsyncSessionLocal() as db:
         account = Account(
+            user_id=user.id,
             name=body.name or login_result.get("username") or body.email.split("@")[0],
             email=body.email,
             password_enc=password_enc,
@@ -94,19 +106,19 @@ async def create_account(body: AccountCreate, request: Request):
 
 
 @router.get("/{account_id}")
-async def get_account(account_id: int):
+async def get_account(account_id: int, user: User = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         account = await db.get(Account, account_id)
-        if not account:
+        if not account or account.user_id != user.id:
             raise HTTPException(404, "Compte introuvable")
         return _serialize(account)
 
 
 @router.put("/{account_id}")
-async def update_account(account_id: int, body: AccountUpdate, request: Request):
+async def update_account(account_id: int, body: AccountUpdate, request: Request, user: User = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         account = await db.get(Account, account_id)
-        if not account:
+        if not account or account.user_id != user.id:
             raise HTTPException(404, "Compte introuvable")
         if body.name is not None:
             account.name = body.name
@@ -128,10 +140,10 @@ async def update_account(account_id: int, body: AccountUpdate, request: Request)
 
 
 @router.delete("/{account_id}")
-async def delete_account(account_id: int, request: Request):
+async def delete_account(account_id: int, request: Request, user: User = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         account = await db.get(Account, account_id)
-        if not account:
+        if not account or account.user_id != user.id:
             raise HTTPException(404, "Compte introuvable")
         await db.delete(account)
         await db.commit()
@@ -143,10 +155,10 @@ async def delete_account(account_id: int, request: Request):
 
 
 @router.post("/{account_id}/login")
-async def relogin_account(account_id: int, request: Request):
+async def relogin_account(account_id: int, request: Request, user: User = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         account = await db.get(Account, account_id)
-        if not account:
+        if not account or account.user_id != user.id:
             raise HTTPException(404, "Compte introuvable")
         if not account.password_enc:
             raise HTTPException(400, "Mot de passe non enregistré — utilisez les cookies manuels")
@@ -179,67 +191,42 @@ async def relogin_account(account_id: int, request: Request):
 
 
 @router.post("/{account_id}/cookies")
-async def set_account_cookies(account_id: int, body: CookiesBody, request: Request):
-    """Set cookies manually for an account (fallback when auto-login fails)."""
+async def set_account_cookies(account_id: int, body: CookiesBody, request: Request, user: User = Depends(get_current_user)):
+    """Set cookies manually — trusted unconditionally (no network validation)."""
     from urllib.parse import unquote as _unquote
 
     async with AsyncSessionLocal() as db:
         account = await db.get(Account, account_id)
-        if not account:
+        if not account or account.user_id != user.id:
             raise HTTPException(404, "Compte introuvable")
 
-        from config import settings as app_settings
         cookies = parse_cookie_string(body.cookies)
         if not cookies:
             raise HTTPException(400, "Cookies invalides")
 
-        client = VintedClient(app_settings.vinted_base_url)
-        await client.__aenter__()
-        try:
-            # Apply user's cookies first — do NOT call fetch_csrf_token()
-            # because fetching the homepage returns anonymous Set-Cookie headers
-            # that would overwrite the valid authenticated cookies.
-            client.set_cookies(cookies)
+        csrf = _unquote(cookies.get("XSRF-TOKEN") or cookies.get("xsrf-token") or "")
 
-            # Extract CSRF token directly from provided cookies (no network call)
-            csrf = _unquote(cookies.get("XSRF-TOKEN") or cookies.get("xsrf-token") or "")
-            if csrf:
-                client.set_csrf_token(csrf)
-
-            # Validate session against Vinted API
-            session_info = await validate_session(client)
-
-            # authenticated=True  → valid session confirmed
-            # authenticated=None  → network error, give benefit of the doubt
-            # authenticated=False → real 401/403, cookies are genuinely invalid
-            validated = session_info.get("authenticated")
-            is_auth = validated if validated is not None else True
-
-            account.cookies = json.dumps(cookies)
-            account.csrf_token = csrf or client._csrf_token
-            account.is_authenticated = is_auth
-            if is_auth:
-                account.vinted_user_id = session_info.get("user_id") or account.vinted_user_id
-                account.vinted_username = session_info.get("username") or account.vinted_username
-                account.last_login = datetime.now(timezone.utc)
-            await db.commit()
-            await db.refresh(account)
-        finally:
-            await client.__aexit__(None, None, None)
+        # Trust the user's cookies unconditionally — no validation call.
+        account.cookies = json.dumps(cookies)
+        account.csrf_token = csrf or ""
+        account.is_authenticated = True
+        account.last_login = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(account)
 
     mgr = getattr(request.app.state, "account_manager", None)
     if mgr:
         await mgr.refresh_account(account_id)
     result = _serialize(account)
-    result["validation_reason"] = session_info.get("reason")
+    result["validation_reason"] = "trusted"
     return result
 
 
 @router.get("/{account_id}/status")
-async def check_account_status(account_id: int, request: Request):
+async def check_account_status(account_id: int, request: Request, user: User = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         account = await db.get(Account, account_id)
-        if not account:
+        if not account or account.user_id != user.id:
             raise HTTPException(404, "Compte introuvable")
 
     mgr = getattr(request.app.state, "account_manager", None)
@@ -248,11 +235,17 @@ async def check_account_status(account_id: int, request: Request):
 
     client = mgr.get_client(account_id)
     if not client:
-        return {"authenticated": False, "error": "Client non initialisé"}
+        return {"authenticated": account.is_authenticated, "reason": "no_client"}
 
     result = await validate_session(client)
-    # Only mark as expired on a real 401/403 — not on network errors
-    if result.get("authenticated") is False and account.is_authenticated:
+    auth = result.get("authenticated")
+    if auth is True and not account.is_authenticated:
+        async with AsyncSessionLocal() as db:
+            acc = await db.get(Account, account_id)
+            if acc:
+                acc.is_authenticated = True
+                await db.commit()
+    elif auth is False:
         async with AsyncSessionLocal() as db:
             acc = await db.get(Account, account_id)
             if acc:

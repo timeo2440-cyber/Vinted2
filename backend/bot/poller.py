@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import select
-from database import AsyncSessionLocal, Filter, SeenItem, Setting, ActivityLog
+from database import AsyncSessionLocal, Filter, SeenItem, Setting, ActivityLog, UserSetting
 from vinted.client import VintedClient
 from vinted.catalog import fetch_newest_items
 from vinted.exceptions import VintedAuthError, VintedRateLimitError, VintedNetworkError
@@ -85,8 +85,7 @@ class ItemPoller:
                 self._consecutive_errors += 1
                 await self._log("warn",
                     "Erreur d'authentification Vinted (403/401). "
-                    "Tentative de réinitialisation de la session…",
-                    "auth")
+                    "Tentative de réinitialisation de la session…", "auth")
                 try:
                     csrf = await self.client.fetch_csrf_token()
                     if csrf:
@@ -94,8 +93,7 @@ class ItemPoller:
                     else:
                         await self._log("error",
                             "Réinitialisation échouée. "
-                            "➜ Copiez vos cookies Vinted dans Paramètres pour débloquer.",
-                            "auth")
+                            "➜ Copiez vos cookies Vinted dans Paramètres pour débloquer.", "auth")
                         await self.ws.broadcast_auth_error(str(e))
                 except Exception as ex:
                     await self._log("error", f"Réinitialisation échouée : {ex}", "auth")
@@ -121,8 +119,10 @@ class ItemPoller:
 
     async def _poll_cycle(self) -> None:
         async with AsyncSessionLocal() as db:
+            # Load ALL enabled filters from ALL users
             result = await db.execute(select(Filter).where(Filter.enabled == True))
-            filters = list(result.scalars().all())
+            all_filters = list(result.scalars().all())
+
             poll_ms_row = await db.execute(select(Setting).where(Setting.key == "poll_interval_ms"))
             poll_ms_setting = poll_ms_row.scalar_one_or_none()
             poll_interval = int(poll_ms_setting.value) / 1000 if poll_ms_setting and poll_ms_setting.value else 2.0
@@ -131,13 +131,11 @@ class ItemPoller:
 
         if not items:
             self._empty_cycles += 1
-            # Log every 10 empty cycles to avoid flooding
             if self._empty_cycles % 10 == 1:
                 await self._log("warn",
                     f"Vinted ne renvoie aucun article ({self._empty_cycles} cycles vides). "
                     "Cause probable : IP bloquée ou cookies expirés. "
-                    "➜ Collez des cookies valides dans l'onglet Paramètres.",
-                    "poller")
+                    "➜ Collez des cookies valides dans l'onglet Paramètres.", "poller")
             await asyncio.sleep(poll_interval)
             return
 
@@ -180,16 +178,36 @@ class ItemPoller:
                     ))
             await db.commit()
 
+        # Build per-user matched filter ids for the broadcast
         for item in new_items:
-            matched = self.filter_engine.get_matching_filters(item, filters)
-            matched_ids = [f.id for f in matched]
-            await self.ws.broadcast_new_item(item, matched_ids)
-            if matched:
-                self.items_matched += 1
-                for f in matched:
-                    await self.ws.broadcast_item_match(item, f.id, f.name)
+            matched_filter_ids = []
+            for f in all_filters:
+                if self.filter_engine.match_item(item, f):
+                    matched_filter_ids.append(f.id)
+
+            # Broadcast new item to all users (global feed)
+            await self.ws.broadcast_new_item(item, matched_filter_ids)
+
+            # Per-user: notify matches and trigger auto-buy
+            for f in all_filters:
+                if self.filter_engine.match_item(item, f):
+                    self.items_matched += 1
+                    # Send match notification only to this filter's owner
+                    await self.ws.broadcast_item_match(item, f.id, f.name, user_id=f.user_id)
                     if f.auto_buy:
-                        asyncio.create_task(self.buy_engine.attempt_buy(item, f))
+                        # Check user's autocop setting
+                        async with AsyncSessionLocal() as db:
+                            row = await db.execute(
+                                select(UserSetting).where(
+                                    UserSetting.user_id == f.user_id,
+                                    UserSetting.key == "autocop",
+                                )
+                            )
+                            setting = row.scalar_one_or_none()
+                        if setting and setting.value.lower() == "true":
+                            asyncio.create_task(
+                                self.buy_engine.attempt_buy(item, f, user_id=f.user_id)
+                            )
 
         await asyncio.sleep(max(0, poll_interval - 0.5))
 

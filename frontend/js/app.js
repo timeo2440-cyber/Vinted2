@@ -1,15 +1,33 @@
 /**
- * App entry point — routing, bot toggle, initial data load.
+ * App entry point — auth gate, routing, bot toggle, initial data load.
  */
 (async function init() {
-  // ── Router ──────────────────────────────────────────────────────────────
+
+  // ── 1. Auth gate ─────────────────────────────────────────────────────────
+  auth.initOverlay();
+
+  const isAuthed = await auth.verify();
+  if (!isAuthed) {
+    await auth.showLoginOverlay();
+  }
+
+  // Render user menu in sidebar
+  _renderUserMenu();
+
+  // Show admin nav if admin
+  if (auth.isAdmin()) {
+    document.getElementById('admin-nav-link').classList.remove('hidden');
+  }
+
+  // ── 2. Router ─────────────────────────────────────────────────────────────
   const VIEWS = {
-    dashboard: { el: 'view-dashboard', title: 'Dashboard',        init: () => dashboardView.init()  },
-    filters:   { el: 'view-filters',   title: 'Filtres',          init: () => filtersView.init()    },
-    accounts:  { el: 'view-accounts',  title: 'Comptes Vinted',   init: () => accountsView.init()   },
-    history:   { el: 'view-history',   title: 'Historique',       init: () => historyView.init()    },
-    stats:     { el: 'view-stats',     title: 'Statistiques',     init: () => statsView.init()      },
-    settings:  { el: 'view-settings',  title: 'Param\u00e8tres', init: () => settingsView.init()   },
+    dashboard: { el: 'view-dashboard', title: 'Dashboard',      init: () => dashboardView.init()  },
+    filters:   { el: 'view-filters',   title: 'Filtres',        init: () => filtersView.init()    },
+    accounts:  { el: 'view-accounts',  title: 'Comptes Vinted', init: () => accountsView.init()   },
+    history:   { el: 'view-history',   title: 'Historique',     init: () => historyView.init()    },
+    stats:     { el: 'view-stats',     title: 'Statistiques',   init: () => statsView.init()      },
+    settings:  { el: 'view-settings',  title: 'Paramètres',    init: () => settingsView.init()   },
+    admin:     { el: 'view-admin',     title: 'Administration', init: () => adminView.init()      },
   };
 
   const initialised = new Set();
@@ -17,22 +35,16 @@
   function navigate(viewKey) {
     const view = VIEWS[viewKey];
     if (!view) return;
+    if (viewKey === 'admin' && !auth.isAdmin()) return;
 
-    Object.values(VIEWS).forEach(v => {
-      document.getElementById(v.el)?.classList.remove('active');
-    });
+    Object.values(VIEWS).forEach(v => document.getElementById(v.el)?.classList.remove('active'));
     document.getElementById(view.el)?.classList.add('active');
-
-    document.querySelectorAll('.nav-link').forEach(link => {
-      link.classList.toggle('active', link.dataset.view === viewKey);
-    });
-
+    document.querySelectorAll('.nav-link').forEach(link =>
+      link.classList.toggle('active', link.dataset.view === viewKey)
+    );
     document.getElementById('page-title').textContent = view.title;
 
-    if (!initialised.has(viewKey)) {
-      initialised.add(viewKey);
-      view.init();
-    }
+    if (!initialised.has(viewKey)) { initialised.add(viewKey); view.init(); }
 
     if (viewKey === 'stats'    && initialised.has('stats'))    statsView.reload();
     if (viewKey === 'history'  && initialised.has('history'))  historyView.reload();
@@ -42,16 +54,13 @@
   }
 
   document.querySelectorAll('.nav-link').forEach(link => {
-    link.addEventListener('click', e => {
-      e.preventDefault();
-      navigate(link.dataset.view);
-    });
+    link.addEventListener('click', e => { e.preventDefault(); navigate(link.dataset.view); });
   });
 
   const hash = location.hash.replace('#', '') || 'dashboard';
   navigate(VIEWS[hash] ? hash : 'dashboard');
 
-  // ── Autocop toggle ──────────────────────────────────────────────────────────
+  // ── 3. Autocop toggle ─────────────────────────────────────────────────────
   const autocopToggle = document.getElementById('autocop-toggle');
   const autocopLabel  = document.getElementById('autocop-label');
 
@@ -59,7 +68,6 @@
     autocopToggle.checked = enabled;
     autocopLabel.textContent = enabled ? 'Autocop ON' : 'Autocop OFF';
     autocopLabel.className = 'autocop-label ' + (enabled ? 'on' : 'off');
-    document.getElementById('autocop-wrap').classList.toggle('active', enabled);
   }
 
   autocopToggle.addEventListener('change', async () => {
@@ -68,31 +76,23 @@
     try {
       await api.setAutocop(enabled);
       updateAutocop(enabled);
-      toast.show(enabled ? 'Autocop activé — achats automatiques en cours !' : 'Autocop désactivé.', enabled ? 'success' : 'info');
+      toast.show(enabled ? 'Autocop activé !' : 'Autocop désactivé.', enabled ? 'success' : 'info');
     } catch (e) {
       toast.show('Erreur : ' + e.message, 'error');
-      updateAutocop(!enabled); // rollback
-    } finally {
-      autocopToggle.disabled = false;
-    }
+      updateAutocop(!enabled);
+    } finally { autocopToggle.disabled = false; }
   });
 
-  // ── Initial state from REST ──────────────────────────────────────────────
+  // ── 4. Initial REST state ─────────────────────────────────────────────────
   try {
     const status = await api.botStatus();
-    store.set('botRunning', status.running);
     store.set('itemsSeen', status.items_seen || 0);
     store.set('itemsMatched', status.items_matched || 0);
     document.getElementById('stat-seen').textContent    = status.items_seen    || 0;
     document.getElementById('stat-matched').textContent = status.items_matched || 0;
-    updateAuthUI(status.authenticated, status.username);
-    store.set('authenticated', status.authenticated);
-    store.set('username', status.username);
-    // Load autocop state
     updateAutocop(status.autocop_enabled || false);
   } catch {}
 
-  // Load filters for badge
   try {
     const filters = await api.getFilters();
     store.set('filters', filters);
@@ -101,36 +101,57 @@
     if (badge && active > 0) { badge.textContent = active; badge.classList.remove('hidden'); }
   } catch {}
 
-  // Load accounts badge
   try {
     const accounts = await api.getAccounts();
     const badge = document.getElementById('accounts-badge');
     if (badge && accounts.length > 0) { badge.textContent = accounts.length; badge.classList.remove('hidden'); }
   } catch {}
 
-  // Load recent logs
   try {
     const logs = await api.getLogs();
-    logs.reverse().forEach(log => { activityLog.append(log.level, log.message, log.category); });
+    logs.reverse().forEach(log => activityLog.append(log.level, log.message, log.category));
   } catch {}
 
-  // ── Connect WebSocket ──────────────────────────────────────────────────────────
+  // ── 5. WebSocket ──────────────────────────────────────────────────────────
   wsClient.connect();
   wsClient.initSoundToggle();
 
-  // ── Items/min rate display ────────────────────────────────────────────────────
+  // ── 6. Items/min rate ─────────────────────────────────────────────────────
   let _rateLastCount = store.get('itemsSeen') || 0;
   let _rateLastTime  = Date.now();
   setInterval(() => {
-    const now     = Date.now();
-    const elapsed = (now - _rateLastTime) / 60000;
-    const current = store.get('itemsSeen');
-    const rate    = elapsed > 0 ? Math.round((current - _rateLastCount) / elapsed) : 0;
+    const elapsed = (Date.now() - _rateLastTime) / 60000;
+    const current = store.get('itemsSeen') || 0;
+    const rate = elapsed > 0 ? Math.round((current - _rateLastCount) / elapsed) : 0;
     const el = document.getElementById('stat-rate');
     if (el) el.textContent = rate;
     _rateLastCount = current;
-    _rateLastTime  = now;
+    _rateLastTime  = Date.now();
   }, 30000);
 
   document.addEventListener('keydown', e => { if (e.key === 'Escape') modal.close(); });
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+  function _renderUserMenu() {
+    const user = auth.getUser();
+    if (!user) return;
+    const slot = document.getElementById('user-menu-slot');
+    if (!slot) return;
+    const initial = (user.email[0] || '?').toUpperCase();
+    const planColors = { free: '#475569', pro: '#38bdf8', unlimited: '#a78bfa' };
+    slot.innerHTML = `
+      <div class="user-menu">
+        <div class="user-avatar">${initial}</div>
+        <div class="user-info">
+          <div class="user-email">${user.email}</div>
+          <div class="user-plan" style="color:${planColors[user.plan]||'#475569'}">${user.plan.toUpperCase()}</div>
+        </div>
+        <button class="user-logout" id="logout-btn" title="Déconnexion">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>`;
+    document.getElementById('logout-btn').addEventListener('click', () => {
+      if (confirm('Se déconnecter ?')) auth.logout();
+    });
+  }
 })();
