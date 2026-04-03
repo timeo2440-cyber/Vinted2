@@ -23,10 +23,43 @@ logging.basicConfig(
 )
 
 
+async def _ensure_admin():
+    """Create default admin account at first startup if no user exists."""
+    import os, bcrypt as _bcrypt
+    from database import User
+    from sqlalchemy import select
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(User).limit(1))
+        if result.scalar_one_or_none():
+            return  # Already have users
+
+        admin_email = os.environ.get("ADMIN_EMAIL", "admin@vintedbot.com")
+        admin_password = os.environ.get("ADMIN_PASSWORD", "Admin1234!")
+        password_hash = _bcrypt.hashpw(admin_password.encode()[:72], _bcrypt.gensalt()).decode()
+        admin = User(
+            email=admin_email,
+            password_hash=password_hash,
+            role="admin",
+            plan="unlimited",
+        )
+        db.add(admin)
+        await db.commit()
+        logging.getLogger("main").info(
+            f"\n"
+            f"{'='*50}\n"
+            f"  COMPTE ADMIN CRÉÉ AUTOMATIQUEMENT\n"
+            f"  Email    : {admin_email}\n"
+            f"  Password : {admin_password}\n"
+            f"  → Connectez-vous sur http://localhost:8000\n"
+            f"{'='*50}"
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── Startup ────────────────────────────────────────────────────────────────
     await init_db()
+    await _ensure_admin()
 
     # Build primary Vinted client (used for polling)
     client = VintedClient(app_settings.vinted_base_url)

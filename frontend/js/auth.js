@@ -53,6 +53,11 @@ const auth = (() => {
     document.querySelectorAll('.login-error').forEach(e => e.classList.remove('visible'));
   }
 
+  async function _safeJson(res) {
+    const text = await res.text();
+    try { return JSON.parse(text); } catch { return { detail: text || 'Erreur serveur' }; }
+  }
+
   async function _doLogin(email, password, errEl, btn) {
     btn.disabled = true;
     btn.textContent = 'Connexion…';
@@ -63,7 +68,7 @@ const auth = (() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await _safeJson(res);
       if (!res.ok) throw new Error(data.detail || 'Erreur connexion');
       save(data.token, data.user);
       hideLoginOverlay();
@@ -87,7 +92,7 @@ const auth = (() => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
-      const data = await res.json();
+      const data = await _safeJson(res);
       if (!res.ok) throw new Error(data.detail || 'Erreur inscription');
       save(data.token, data.user);
       hideLoginOverlay();
