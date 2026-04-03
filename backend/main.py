@@ -43,6 +43,19 @@ async def lifespan(app: FastAPI):
     # This fetches XSRF-TOKEN and sets anonymous session cookies
     await client.fetch_csrf_token()
 
+    # Auto-repair: any account with cookies stored but marked as expired → restore to authenticated.
+    # We trust saved cookies unconditionally; the user explicitly pasted them.
+    # Cloudflare often blocks session validation which wrongly marks accounts as expired.
+    async with AsyncSessionLocal() as db:
+        from sqlalchemy import update
+        from database import Account
+        await db.execute(
+            update(Account)
+            .where(Account.cookies != None, Account.cookies != "", Account.is_authenticated == False)
+            .values(is_authenticated=True)
+        )
+        await db.commit()
+
     # Initialize account manager (one client per saved account)
     account_manager = AccountManager(app_settings.vinted_base_url)
     await account_manager.initialize()

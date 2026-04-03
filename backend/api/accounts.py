@@ -227,11 +227,23 @@ async def check_account_status(account_id: int, request: Request):
 
     client = mgr.get_client(account_id)
     if not client:
-        return {"authenticated": False, "error": "Client non initialisé"}
+        # No client loaded → account has cookies but wasn't in the active pool.
+        # Return current DB state (probably True from auto-repair).
+        return {"authenticated": account.is_authenticated, "reason": "no_client"}
 
     result = await validate_session(client)
-    # Only mark as expired on a real 401/403 — not on network errors
-    if result.get("authenticated") is False and account.is_authenticated:
+    # Only write to DB on a confirmed real Vinted 401/403 (not network/Cloudflare errors).
+    # authenticated=False → real auth failure → mark expired
+    # authenticated=None  → network error   → keep current DB state, don't touch it
+    # authenticated=True  → confirmed valid  → mark authenticated
+    auth = result.get("authenticated")
+    if auth is True and not account.is_authenticated:
+        async with AsyncSessionLocal() as db:
+            acc = await db.get(Account, account_id)
+            if acc:
+                acc.is_authenticated = True
+                await db.commit()
+    elif auth is False:
         async with AsyncSessionLocal() as db:
             acc = await db.get(Account, account_id)
             if acc:
