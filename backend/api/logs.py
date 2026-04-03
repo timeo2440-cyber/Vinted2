@@ -1,3 +1,5 @@
+from __future__ import annotations
+from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +14,7 @@ router = APIRouter(prefix="/api/logs", tags=["logs"])
 async def list_logs(
     page: int = Query(1, ge=1),
     per_page: int = Query(100, ge=1, le=500),
-    level: str | None = Query(None),
+    level: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
