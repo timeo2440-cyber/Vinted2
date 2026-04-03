@@ -37,20 +37,26 @@ def parse_cookie_string(raw: str) -> dict:
 async def validate_session(client: VintedClient) -> dict:
     """
     Validate the current session by calling /api/v2/users/current_user.
-    Returns {"authenticated": bool, "username": str|None, "user_id": str|None}
+    Returns:
+      {"authenticated": True,  "username": ..., "user_id": ...}  — session valide
+      {"authenticated": False, "reason": "auth_error"}           — vrai 401/403 Vinted
+      {"authenticated": None,  "reason": "network_error"}        — erreur réseau/Cloudflare
     """
     try:
         data = await client.get("/users/current_user")
         user = data.get("user", {})
+        # If response has no 'user' key it's probably a Cloudflare HTML page
+        if not user:
+            return {"authenticated": None, "reason": "network_error"}
         return {
             "authenticated": True,
             "username": user.get("login") or user.get("username"),
             "user_id": str(user.get("id", "")),
         }
     except VintedAuthError:
-        return {"authenticated": False, "username": None, "user_id": None}
+        return {"authenticated": False, "reason": "auth_error"}
     except Exception:
-        return {"authenticated": False, "username": None, "user_id": None}
+        return {"authenticated": None, "reason": "network_error"}
 
 
 async def load_cookies_into_client(client: VintedClient, cookie_string: str) -> bool:

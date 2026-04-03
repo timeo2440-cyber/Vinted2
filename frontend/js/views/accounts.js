@@ -42,15 +42,20 @@ const accountsView = (() => {
         if (action === 'relogin')  _reloginAccount(+id);
         if (action === 'edit')     _openEditModal(+id);
         if (action === 'cookies')  _openCookiesModal(+id);
+        if (action === 'verify')   _verifyAccount(+id, el);
       });
     });
   }
 
+  function _statusBadge(is_authenticated) {
+    if (is_authenticated === true)  return ['connected', 'Connecté'];
+    if (is_authenticated === false) return ['expired',   'Expiré'];
+    return ['unknown', 'Non vérifié'];
+  }
+
   function _buildCard(a) {
     const initial = ((a.vinted_username || a.name || a.email)[0] || '?').toUpperCase();
-    const authenticated = a.is_authenticated;
-    const statusCls   = authenticated ? 'connected' : 'expired';
-    const statusLabel = authenticated ? 'Connecté' : 'Expiré';
+    const [statusCls, statusLabel] = _statusBadge(a.is_authenticated);
     const inactiveCls = !a.is_active ? 'inactive' : '';
     const bannedBadge = a.ban_suspected ? '<span class="account-ban-badge">⚠ Suspecté banni</span>' : '';
     const lastLogin   = a.last_login
@@ -64,7 +69,8 @@ const accountsView = (() => {
         <div class="account-name">${_esc(a.vinted_username || a.name)}</div>
         <div class="account-email">${_esc(a.email)}</div>
         <div class="account-meta">
-          <span class="account-status ${statusCls}">${statusLabel}</span>
+          <span class="account-status ${statusCls}" id="status-badge-${a.id}">${statusLabel}</span>
+          <button class="btn-verify btn-xs" data-action="verify" data-id="${a.id}" title="Vérifier la connexion">✓ Vérifier</button>
           <span class="account-purchases">${a.purchases_count} achat${a.purchases_count !== 1 ? 's' : ''}</span>
           <span class="account-lastlogin">Dernier login : ${lastLogin}</span>
         </div>
@@ -260,7 +266,12 @@ const accountsView = (() => {
       if (!cookies) { toast.show('Collez vos cookies', 'warn'); return; }
       try {
         const result = await api.setAccountCookies(id, cookies);
-        toast.show(result.is_authenticated ? 'Connecté en tant que ' + (result.vinted_username || result.email) : 'Cookies sauvegardés (session invalide)', result.is_authenticated ? 'success' : 'warn');
+        const msg = result.is_authenticated
+          ? `✅ Connecté — ${result.vinted_username || result.email}`
+          : result.validation_reason === 'network_error'
+            ? '⚠ Cookies sauvegardés — impossible de vérifier (réseau). Cliquez "Vérifier" plus tard.'
+            : '❌ Cookies invalides — session expirée sur Vinted';
+        toast.show(msg, result.is_authenticated ? 'success' : result.validation_reason === 'network_error' ? 'warn' : 'error');
         modal.close();
         await reload();
       } catch (e) {
@@ -296,6 +307,30 @@ const accountsView = (() => {
       await reload();
     } catch (e) {
       toast.show('Erreur : ' + e.message, 'error');
+    }
+  }
+
+  async function _verifyAccount(id, btn) {
+    const badge = document.getElementById(`status-badge-${id}`);
+    if (badge) { badge.className = 'account-status verifying'; badge.textContent = 'Vérification…'; }
+    if (btn) { btn.disabled = true; }
+    try {
+      const result = await api.checkAccountStatus(id);
+      const auth = result.authenticated;
+      const [cls, label] = auth === true  ? ['connected', 'Connecté']
+                         : auth === false ? ['expired',   'Expiré']
+                         :                  ['unknown',   'Non vérifié'];
+      if (badge) { badge.className = `account-status ${cls}`; badge.textContent = label; }
+      const msg = auth === true  ? `Compte connecté — ${result.username || ''}`.trim()
+                : auth === false ? 'Session expirée — recollez vos cookies'
+                :                  'Impossible de vérifier (réseau). Cookies conservés.';
+      toast.show(msg, auth === true ? 'success' : auth === false ? 'error' : 'warn');
+      if (auth !== null) await reload();
+    } catch (e) {
+      if (badge) { badge.className = 'account-status unknown'; badge.textContent = 'Non vérifié'; }
+      toast.show('Erreur vérification : ' + e.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; }
     }
   }
 
