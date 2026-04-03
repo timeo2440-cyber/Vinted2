@@ -5,12 +5,22 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
-from passlib.context import CryptContext
+import bcrypt
 from database import AsyncSessionLocal, User, LicenseKey, PLAN_LIMITS
 from auth_deps import create_token, get_current_user
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode()[:72], bcrypt.gensalt()).decode()
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode()[:72], hashed.encode())
+    except Exception:
+        return False
 
 
 class RegisterBody(BaseModel):
@@ -65,7 +75,7 @@ async def register(body: RegisterBody):
 
         user = User(
             email=body.email.lower().strip(),
-            password_hash=pwd_ctx.hash(body.password),
+            password_hash=_hash_password(body.password),
             role="admin" if is_first else "user",
             plan="unlimited" if is_first else "free",
         )
@@ -83,7 +93,7 @@ async def login(body: LoginBody):
         result = await db.execute(select(User).where(User.email == body.email.lower().strip()))
         user = result.scalar_one_or_none()
 
-    if not user or not pwd_ctx.verify(body.password, user.password_hash):
+    if not user or not _verify_password(body.password, user.password_hash):
         raise HTTPException(401, "Email ou mot de passe incorrect")
     if not user.is_active:
         raise HTTPException(403, "Compte suspendu — contactez l'administrateur")
@@ -127,12 +137,12 @@ async def change_password(
 ):
     old_pw = body.get("old_password", "")
     new_pw = body.get("new_password", "")
-    if not pwd_ctx.verify(old_pw, user.password_hash):
+    if not _verify_password(old_pw, user.password_hash):
         raise HTTPException(400, "Ancien mot de passe incorrect")
     if len(new_pw) < 6:
         raise HTTPException(400, "Nouveau mot de passe trop court")
     async with AsyncSessionLocal() as db:
         u = await db.get(User, user.id)
-        u.password_hash = pwd_ctx.hash(new_pw)
+        u.password_hash = _hash_password(new_pw)
         await db.commit()
     return {"ok": True}

@@ -167,44 +167,45 @@ class Account(Base):
     updated_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
-async def _run_migrations(conn):
+async def _run_migrations():
     """SQLite schema migrations — adds columns/tables missing from older DBs."""
     from sqlalchemy import text
 
-    async def column_exists(table: str, column: str) -> bool:
-        result = await conn.execute(text(f"PRAGMA table_info({table})"))
-        return any(row[1] == column for row in result.fetchall())
+    async with engine.begin() as conn:
+        async def column_exists(table: str, column: str) -> bool:
+            result = await conn.execute(text(f"PRAGMA table_info({table})"))
+            return any(row[1] == column for row in result.fetchall())
 
-    async def table_exists(table: str) -> bool:
-        result = await conn.execute(
-            text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
-            {"t": table},
-        )
-        return result.fetchone() is not None
+        async def table_exists(table: str) -> bool:
+            result = await conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
+                {"t": table},
+            )
+            return result.fetchone() is not None
 
-    # Add user_id to accounts
-    if await table_exists("accounts") and not await column_exists("accounts", "user_id"):
-        await conn.execute(text("ALTER TABLE accounts ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+        # Add user_id to accounts
+        if await table_exists("accounts") and not await column_exists("accounts", "user_id"):
+            await conn.execute(text("ALTER TABLE accounts ADD COLUMN user_id INTEGER REFERENCES users(id)"))
 
-    # Add user_id to filters
-    if await table_exists("filters") and not await column_exists("filters", "user_id"):
-        await conn.execute(text("ALTER TABLE filters ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+        # Add user_id to filters
+        if await table_exists("filters") and not await column_exists("filters", "user_id"):
+            await conn.execute(text("ALTER TABLE filters ADD COLUMN user_id INTEGER REFERENCES users(id)"))
 
-    # Add user_id to purchases
-    if await table_exists("purchases") and not await column_exists("purchases", "user_id"):
-        await conn.execute(text("ALTER TABLE purchases ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+        # Add user_id to purchases
+        if await table_exists("purchases") and not await column_exists("purchases", "user_id"):
+            await conn.execute(text("ALTER TABLE purchases ADD COLUMN user_id INTEGER REFERENCES users(id)"))
 
-    # Add user_id to activity_log
-    if await table_exists("activity_log") and not await column_exists("activity_log", "user_id"):
-        await conn.execute(text("ALTER TABLE activity_log ADD COLUMN user_id INTEGER REFERENCES users(id)"))
-
-    await conn.commit()
+        # Add user_id to activity_log
+        if await table_exists("activity_log") and not await column_exists("activity_log", "user_id"):
+            await conn.execute(text("ALTER TABLE activity_log ADD COLUMN user_id INTEGER REFERENCES users(id)"))
 
 
 async def init_db():
+    # Step 1 — add missing columns to existing tables
+    await _run_migrations()
+
+    # Step 2 — create any new tables (users, license_keys, user_settings…)
     async with engine.begin() as conn:
-        # Run migrations before create_all to ensure columns exist
-        await _run_migrations(conn)
         await conn.run_sync(Base.metadata.create_all)
 
     # If no user exists, create a default admin with a random password
