@@ -181,6 +181,8 @@ async def relogin_account(account_id: int, request: Request):
 @router.post("/{account_id}/cookies")
 async def set_account_cookies(account_id: int, body: CookiesBody, request: Request):
     """Set cookies manually for an account (fallback when auto-login fails)."""
+    from urllib.parse import unquote as _unquote
+
     async with AsyncSessionLocal() as db:
         account = await db.get(Account, account_id)
         if not account:
@@ -194,16 +196,31 @@ async def set_account_cookies(account_id: int, body: CookiesBody, request: Reque
         client = VintedClient(app_settings.vinted_base_url)
         await client.__aenter__()
         try:
+            # Apply user's cookies first — do NOT call fetch_csrf_token()
+            # because fetching the homepage returns anonymous Set-Cookie headers
+            # that would overwrite the valid authenticated cookies.
             client.set_cookies(cookies)
-            await client.fetch_csrf_token()
+
+            # Extract CSRF token directly from provided cookies (no network call)
+            csrf = _unquote(cookies.get("XSRF-TOKEN") or cookies.get("xsrf-token") or "")
+            if csrf:
+                client.set_csrf_token(csrf)
+
+            # Validate session against Vinted API
             session_info = await validate_session(client)
 
+            # authenticated=True  → valid session confirmed
+            # authenticated=None  → network error, give benefit of the doubt
+            # authenticated=False → real 401/403, cookies are genuinely invalid
+            validated = session_info.get("authenticated")
+            is_auth = validated if validated is not None else True
+
             account.cookies = json.dumps(cookies)
-            account.csrf_token = client._csrf_token
-            account.is_authenticated = session_info["authenticated"]
-            if session_info["authenticated"]:
-                account.vinted_user_id = session_info.get("user_id")
-                account.vinted_username = session_info.get("username")
+            account.csrf_token = csrf or client._csrf_token
+            account.is_authenticated = is_auth
+            if is_auth:
+                account.vinted_user_id = session_info.get("user_id") or account.vinted_user_id
+                account.vinted_username = session_info.get("username") or account.vinted_username
                 account.last_login = datetime.now(timezone.utc)
             await db.commit()
             await db.refresh(account)
@@ -213,7 +230,9 @@ async def set_account_cookies(account_id: int, body: CookiesBody, request: Reque
     mgr = getattr(request.app.state, "account_manager", None)
     if mgr:
         await mgr.refresh_account(account_id)
-    return _serialize(account)
+    result = _serialize(account)
+    result["validation_reason"] = session_info.get("reason")
+    return result
 
 
 @router.get("/{account_id}/status")
@@ -232,7 +251,8 @@ async def check_account_status(account_id: int, request: Request):
         return {"authenticated": False, "error": "Client non initialisé"}
 
     result = await validate_session(client)
-    if not result["authenticated"] and account.is_authenticated:
+    # Only mark as expired on a real 401/403 — not on network errors
+    if result.get("authenticated") is False and account.is_authenticated:
         async with AsyncSessionLocal() as db:
             acc = await db.get(Account, account_id)
             if acc:

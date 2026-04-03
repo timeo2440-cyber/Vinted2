@@ -93,6 +93,35 @@
   background: rgba(239,68,68,0.12);
   color: var(--red);
 }
+.account-status.unknown {
+  background: rgba(234,179,8,0.15);
+  color: var(--yellow);
+}
+.account-status.verifying {
+  background: var(--bg-3);
+  color: var(--text-muted);
+  animation: pulse-dot 1.2s infinite;
+}
+
+/* Verify button */
+.btn-verify {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-verify:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+.btn-verify:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .account-purchases {
   font-size: 11px;
