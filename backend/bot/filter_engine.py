@@ -29,21 +29,35 @@ class FilterEngine:
         if category_ids and not self._match_list(str(item.get("category_id", "")), [str(c) for c in category_ids]):
             return False
 
-        # Brand check
+        # Brand check — match by numeric ID or text fallback
         brand_ids = self._parse_json_list(get("brand_ids"))
-        if brand_ids and not self._match_list(str(item.get("brand_id", "")), [str(b) for b in brand_ids]):
-            return False
+        if brand_ids:
+            item_brand_id = str(item.get("brand_id") or "")
+            if not self._match_list(item_brand_id, [str(b) for b in brand_ids]):
+                return False
 
-        # Size check
+        # Size check — match by numeric ID
         size_ids = self._parse_json_list(get("size_ids"))
-        if size_ids and not self._match_list(str(item.get("size_id", "")), [str(s) for s in size_ids]):
-            return False
+        if size_ids:
+            item_size_id = str(item.get("size_id") or "")
+            if not self._match_list(item_size_id, [str(s) for s in size_ids]):
+                return False
 
-        # Condition check
+        # Condition check — match against code ("good") OR text ("Bon état")
         conditions = self._parse_json_list(get("conditions"))
         if conditions:
             item_condition = (item.get("condition") or "").lower()
-            if not any(c.lower() in item_condition or item_condition in c.lower() for c in conditions):
+            item_condition_code = (item.get("condition_code") or "").lower()
+            matched = False
+            for c in conditions:
+                cl = c.lower()
+                # Match by code (e.g. "good" == "good")
+                if cl == item_condition_code:
+                    matched = True; break
+                # Match by partial text (e.g. "bon" in "bon état")
+                if cl in item_condition or item_condition in cl:
+                    matched = True; break
+            if not matched:
                 return False
 
         # Price check

@@ -86,8 +86,11 @@ class SeenItem(Base):
     title: Mapped[Optional[str]] = mapped_column(String(500))
     price: Mapped[Optional[float]] = mapped_column(Float)
     brand: Mapped[Optional[str]] = mapped_column(String(200))
+    brand_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     size: Mapped[Optional[str]] = mapped_column(String(100))
+    size_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     condition: Mapped[Optional[str]] = mapped_column(String(100))
+    condition_code: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     photo_url: Mapped[Optional[str]] = mapped_column(Text)
     item_url: Mapped[Optional[str]] = mapped_column(Text)
     seller_id: Mapped[Optional[str]] = mapped_column(String(100))
@@ -195,6 +198,15 @@ async def _run_migrations():
 
         if await table_exists("activity_log") and not await column_exists("activity_log", "user_id"):
             await conn.execute(text("ALTER TABLE activity_log ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+
+        # Add brand_id, size_id, condition_code to seen_items if missing
+        if await table_exists("seen_items"):
+            if not await column_exists("seen_items", "brand_id"):
+                await conn.execute(text("ALTER TABLE seen_items ADD COLUMN brand_id INTEGER"))
+            if not await column_exists("seen_items", "size_id"):
+                await conn.execute(text("ALTER TABLE seen_items ADD COLUMN size_id INTEGER"))
+            if not await column_exists("seen_items", "condition_code"):
+                await conn.execute(text("ALTER TABLE seen_items ADD COLUMN condition_code TEXT"))
 
 
 async def init_db():

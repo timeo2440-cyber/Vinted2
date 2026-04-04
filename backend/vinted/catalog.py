@@ -27,20 +27,36 @@ def normalize_item(raw: dict) -> dict:
     item_id = str(raw.get("id", ""))
     url = raw.get("url") or f"https://www.vinted.fr/items/{item_id}"
 
-    # Brand
-    brand = raw.get("brand_title") or raw.get("brand")
-    if isinstance(brand, dict):
-        brand = brand.get("title")
+    # Brand — extract both text and numeric ID
+    brand_raw = raw.get("brand_title") or raw.get("brand")
+    brand_id = raw.get("brand_id")
+    if isinstance(brand_raw, dict):
+        brand = brand_raw.get("title")
+        if not brand_id:
+            brand_id = brand_raw.get("id")
+    else:
+        brand = brand_raw
 
-    # Size
-    size = raw.get("size_title") or raw.get("size")
-    if isinstance(size, dict):
-        size = size.get("title")
+    # Size — extract both text and numeric ID
+    size_raw = raw.get("size_title") or raw.get("size")
+    size_id = raw.get("size_id")
+    if isinstance(size_raw, dict):
+        size = size_raw.get("title")
+        if not size_id:
+            size_id = size_raw.get("id")
+    else:
+        size = size_raw
 
-    # Condition
+    # Condition — keep both raw code ("good") and localized text ("Bon état")
     condition = raw.get("status") or raw.get("condition")
+    condition_code = None
     if isinstance(condition, dict):
+        condition_code = condition.get("code") or condition.get("id")
         condition = condition.get("title")
+    elif isinstance(condition, str):
+        # If it looks like a code (no spaces, lowercase), store it as code too
+        if condition and condition == condition.lower() and " " not in condition:
+            condition_code = condition
 
     # Category
     category_id = raw.get("catalog_id") or raw.get("category_id")
@@ -54,8 +70,11 @@ def normalize_item(raw: dict) -> dict:
         "title": raw.get("title", ""),
         "price": price_val,
         "brand": brand,
+        "brand_id": brand_id,
         "size": size,
+        "size_id": size_id,
         "condition": condition,
+        "condition_code": condition_code,
         "category_id": category_id,
         "photo_url": photo,
         "item_url": url,
