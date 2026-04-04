@@ -419,23 +419,9 @@ function toggleFaq(el) {
   item.classList.toggle('open');
 }
 
-async function pay(plan) {
-  try {
-    const r = await fetch('/api/payment/checkout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan })
-    });
-    const data = await r.json();
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
-      // Stripe not configured — go to register with plan
-      window.location.href = '/register.html?plan=' + plan;
-    }
-  } catch {
-    window.location.href = '/register.html?plan=' + plan;
-  }
+function pay(plan) {
+  // Go to the integrated signup+payment page
+  window.location.href = '/inscription.html?plan=' + plan;
 }
 </script>
 </body>

@@ -8,80 +8,241 @@
     *{box-sizing:border-box;margin:0;padding:0}
     body{background:#080910;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px}
     .box{background:#0f1119;border:1px solid #1a1d2e;border-radius:20px;padding:48px 40px;max-width:480px;width:100%;text-align:center}
-    .icon{width:72px;height:72px;background:rgba(16,185,129,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 24px}
+    .logo{font-size:20px;font-weight:900;color:#fff;margin-bottom:32px}
+    .logo span{color:#6c63ff}
+    .icon{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 24px}
+    .icon.success{background:rgba(16,185,129,.15)}
+    .icon.loading{background:rgba(108,99,255,.12);font-size:24px}
     h1{font-size:26px;font-weight:800;color:#e2e8f0;margin-bottom:10px}
-    .sub{color:#64748b;font-size:15px;margin-bottom:32px}
-    .key-box{background:#080910;border:2px solid #6c63ff;border-radius:12px;padding:20px;margin-bottom:24px}
-    .key-label{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
-    .key{font-size:14px;font-family:monospace;color:#a78bfa;word-break:break-all;font-weight:600}
-    .copy-btn{background:rgba(108,99,255,.15);color:#6c63ff;border:1px solid rgba(108,99,255,.3);padding:8px 20px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;transition:.15s}
-    .copy-btn:hover{background:rgba(108,99,255,.25)}
-    .copy-ok{color:#10b981;font-size:13px;display:none;margin-bottom:12px}
-    .steps{text-align:left;background:#080910;border:1px solid #1a1d2e;border-radius:12px;padding:20px;margin-bottom:24px;font-size:14px;color:#94a3b8;display:flex;flex-direction:column;gap:10px}
-    .steps li{display:flex;align-items:flex-start;gap:8px;list-style:none}
-    .steps .n{background:#6c63ff;color:#fff;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:1px}
-    .btn-register{display:block;background:#6c63ff;color:#fff;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;transition:.15s;margin:0 auto}
-    .btn-register:hover{background:#5750e3;transform:translateY(-1px)}
-    .loading{color:#64748b;font-size:14px}
+    .sub{color:#64748b;font-size:15px;margin-bottom:28px}
+
+    /* progress steps */
+    .steps{display:flex;flex-direction:column;gap:10px;text-align:left;margin-bottom:28px}
+    .step-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:#080910;border:1px solid #1a1d2e;border-radius:10px;font-size:14px;color:#64748b;transition:.3s}
+    .step-item.done{border-color:rgba(16,185,129,.3);color:#e2e8f0}
+    .step-item.active{border-color:rgba(108,99,255,.3);color:#e2e8f0;background:rgba(108,99,255,.05)}
+    .step-item.error{border-color:rgba(248,113,113,.3);color:#f87171}
+    .step-dot{width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;background:#1a1d2e;color:#64748b;transition:.3s}
+    .step-item.done .step-dot{background:rgba(16,185,129,.2);color:#10b981}
+    .step-item.active .step-dot{background:rgba(108,99,255,.2);color:#6c63ff;animation:spin 1s linear infinite}
+    .step-item.error .step-dot{background:rgba(248,113,113,.15);color:#f87171}
+    @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+
+    .btn-go{display:block;background:#6c63ff;color:#fff;padding:15px 28px;border-radius:10px;font-size:16px;font-weight:800;text-decoration:none;transition:.15s;margin:0 auto;border:none;cursor:pointer;width:100%}
+    .btn-go:hover{background:#5750e3;transform:translateY(-1px)}
+
+    /* Fallback: credentials form */
+    .credentials-form{display:none;text-align:left;margin-bottom:24px}
+    .credentials-form label{display:block;color:#9ca3af;font-size:13px;margin-bottom:5px;margin-top:14px}
+    .credentials-form input{width:100%;padding:11px 14px;background:#080910;border:1px solid #1a1d2e;border-radius:8px;color:#e2e8f0;font-size:14px;outline:none;transition:.15s}
+    .credentials-form input:focus{border-color:#6c63ff}
+    .error-msg{color:#f87171;font-size:13px;margin-top:10px;min-height:18px;text-align:center}
+
+    .loading-spinner{width:32px;height:32px;border:3px solid #1a1d2e;border-top-color:#6c63ff;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto}
   </style>
 </head>
 <body>
 <div class="box">
-  <div id="loading" class="loading">Vérification du paiement…</div>
-  <div id="success" style="display:none">
-    <div class="icon">✓</div>
-    <h1>Paiement confirmé !</h1>
-    <p class="sub">Voici ta clé d'activation. Garde-la précieusement.</p>
-    <div class="key-box">
-      <div class="key-label">Ta clé d'activation</div>
-      <div class="key" id="key-display">—</div>
-    </div>
-    <button class="copy-btn" onclick="copyKey()">Copier la clé</button>
-    <div class="copy-ok" id="copy-ok">✓ Copié !</div>
-    <ul class="steps">
-      <li><span class="n">1</span><span>Clique sur "Créer mon compte" ci-dessous</span></li>
-      <li><span class="n">2</span><span>Renseigne ton email et mot de passe</span></li>
-      <li><span class="n">3</span><span>Entre ta clé d'activation dans le champ prévu</span></li>
-      <li><span class="n">4</span><span>Configure tes filtres et c'est parti !</span></li>
-    </ul>
-    <a href="#" id="register-link" class="btn-register">Créer mon compte →</a>
+  <div class="logo">⚡ <span>Flash</span>cop</div>
+
+  <!-- Loading state -->
+  <div id="state-loading">
+    <div class="loading-spinner" style="margin-bottom:24px"></div>
+    <p style="color:#64748b;font-size:14px" id="loading-msg">Vérification du paiement…</p>
   </div>
-  <div id="error" style="display:none;color:#f87171;font-size:15px">
-    Paiement non confirmé. <a href="/" style="color:#6c63ff">Retour à l'accueil</a>
+
+  <!-- Auto-signup progress -->
+  <div id="state-progress" style="display:none">
+    <div class="icon loading">⚡</div>
+    <h1>Paiement confirmé !</h1>
+    <p class="sub">Création de ton compte en cours…</p>
+    <div class="steps">
+      <div class="step-item done" id="s1"><div class="step-dot">✓</div><span>Paiement vérifié</span></div>
+      <div class="step-item active" id="s2"><div class="step-dot">↻</div><span>Création du compte…</span></div>
+      <div class="step-item" id="s3"><div class="step-dot">3</div><span>Connexion automatique</span></div>
+    </div>
+  </div>
+
+  <!-- Success + redirect -->
+  <div id="state-success" style="display:none">
+    <div class="icon success">✓</div>
+    <h1>Tout est prêt !</h1>
+    <p class="sub">Ton compte a été créé et tu es connecté. Redirection…</p>
+    <a href="/app" class="btn-go">Accéder au tableau de bord →</a>
+  </div>
+
+  <!-- Fallback: credentials needed -->
+  <div id="state-fallback" style="display:none">
+    <div class="icon success">✓</div>
+    <h1>Paiement confirmé !</h1>
+    <p class="sub">Entre tes informations pour finaliser la création de ton compte.</p>
+    <div class="credentials-form" id="cred-form" style="display:block">
+      <label>Email</label>
+      <input type="email" id="fb-email" placeholder="votre@email.com"/>
+      <label>Mot de passe (min. 6 caractères)</label>
+      <input type="password" id="fb-password" placeholder="••••••••"/>
+      <label>Confirmer le mot de passe</label>
+      <input type="password" id="fb-password2" placeholder="••••••••"/>
+    </div>
+    <div class="error-msg" id="fb-err"></div>
+    <button class="btn-go" id="fb-btn" onclick="fallbackSignup()" style="margin-top:16px">Créer mon compte</button>
+  </div>
+
+  <!-- Error -->
+  <div id="state-error" style="display:none">
+    <div class="icon" style="background:rgba(248,113,113,.12)">✗</div>
+    <h1 style="color:#f87171">Paiement non confirmé</h1>
+    <p class="sub" id="error-msg">Une erreur est survenue. Contacte le support si le problème persiste.</p>
+    <a href="/" class="btn-go" style="background:#1a1d2e;color:#e2e8f0;margin-top:8px">Retour à l'accueil</a>
   </div>
 </div>
+
 <script>
-let licKey = '';
+function show(stateId) {
+  ['loading','progress','success','fallback','error'].forEach(s => {
+    document.getElementById('state-' + s).style.display = s === stateId ? 'block' : 'none';
+  });
+}
+
+function stepDone(id) {
+  const el = document.getElementById(id);
+  el.className = 'step-item done';
+  el.querySelector('.step-dot').textContent = '✓';
+}
+function stepActive(id, label) {
+  const el = document.getElementById(id);
+  el.className = 'step-item active';
+  el.querySelector('.step-dot').textContent = '↻';
+  if (label) el.querySelector('span').textContent = label;
+}
+
 async function init() {
   const params = new URLSearchParams(window.location.search);
   const sessionId = params.get('session_id');
   const plan = params.get('plan') || 'starter';
 
   if (!sessionId) {
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('error').style.display = 'block';
+    show('error');
+    document.getElementById('error-msg').textContent = 'Session de paiement manquante. Retourne à l\'accueil.';
     return;
   }
+
+  // Try to get stored signup credentials
+  let signup = null;
   try {
-    const r = await fetch(`/api/payment/session/${sessionId}?plan=${plan}`);
-    const data = await r.json();
-    if (!r.ok) throw new Error();
-    licKey = data.key;
-    document.getElementById('key-display').textContent = licKey;
-    document.getElementById('register-link').href = `/register.html?plan=${plan}&key=${encodeURIComponent(licKey)}`;
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('success').style.display = 'block';
-  } catch {
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('error').style.display = 'block';
+    const stored = sessionStorage.getItem('fc_signup');
+    if (stored) signup = JSON.parse(stored);
+  } catch {}
+
+  if (signup && signup.email && signup.password) {
+    // We have credentials — do the full auto-signup
+    show('progress');
+    await autoSignup(sessionId, signup.email, signup.password, plan);
+  } else {
+    // No credentials in sessionStorage (different tab / browser crash)
+    // Verify payment, then show fallback form
+    document.getElementById('loading-msg').textContent = 'Vérification du paiement…';
+    const paid = await verifyPayment(sessionId, plan);
+    if (paid) {
+      // Store session_id for fallback form
+      sessionStorage.setItem('fc_session_id', sessionId);
+      sessionStorage.setItem('fc_plan', plan);
+      show('fallback');
+    } else {
+      show('error');
+    }
   }
 }
-function copyKey() {
-  navigator.clipboard.writeText(licKey).then(() => {
-    document.getElementById('copy-ok').style.display = 'block';
-    setTimeout(() => document.getElementById('copy-ok').style.display = 'none', 2000);
-  });
+
+async function verifyPayment(sessionId, plan) {
+  try {
+    const r = await fetch(`/api/payment/session/${sessionId}?plan=${plan}`);
+    return r.ok;
+  } catch {
+    return false;
+  }
 }
+
+async function autoSignup(sessionId, email, password, plan) {
+  try {
+    const r = await fetch('/api/payment/complete-signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, email, password, plan }),
+    });
+    const data = await r.json();
+
+    if (!r.ok) {
+      // Account might already exist — try login
+      if (r.status === 400 && (data.detail || '').includes('déjà utilisé')) {
+        stepDone('s2');
+        stepActive('s3', 'Connexion en cours…');
+        const lr = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        });
+        const ld = await lr.json();
+        if (lr.ok) {
+          finishLogin(ld);
+          return;
+        }
+      }
+      show('error');
+      document.getElementById('error-msg').textContent = data.detail || 'Erreur lors de la création du compte.';
+      return;
+    }
+
+    stepDone('s2');
+    stepActive('s3', 'Connexion automatique…');
+    await new Promise(r => setTimeout(r, 600));
+    finishLogin(data);
+  } catch(e) {
+    show('error');
+    document.getElementById('error-msg').textContent = 'Erreur serveur : ' + e.message;
+  }
+}
+
+function finishLogin(data) {
+  sessionStorage.removeItem('fc_signup');
+  sessionStorage.removeItem('fc_session_id');
+  sessionStorage.removeItem('fc_plan');
+  localStorage.setItem('vbot_token', data.token);
+  localStorage.setItem('vbot_user', JSON.stringify(data.user));
+  stepDone('s3');
+  show('success');
+  setTimeout(() => { window.location.href = '/app'; }, 1500);
+}
+
+async function fallbackSignup() {
+  const email = document.getElementById('fb-email').value.trim();
+  const pw = document.getElementById('fb-password').value;
+  const pw2 = document.getElementById('fb-password2').value;
+  const errEl = document.getElementById('fb-err');
+  const btn = document.getElementById('fb-btn');
+  errEl.textContent = '';
+
+  if (!email) { errEl.textContent = 'Entre ton email.'; return; }
+  if (pw.length < 6) { errEl.textContent = 'Mot de passe trop court (min 6 caractères).'; return; }
+  if (pw !== pw2) { errEl.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Création en cours…';
+
+  const sessionId = sessionStorage.getItem('fc_session_id') || new URLSearchParams(window.location.search).get('session_id');
+  const plan = sessionStorage.getItem('fc_plan') || new URLSearchParams(window.location.search).get('plan') || 'starter';
+
+  // Show progress
+  show('progress');
+  await autoSignup(sessionId, email, pw, plan);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('state-fallback').style.display !== 'none') {
+    fallbackSignup();
+  }
+});
+
 init();
 </script>
 </body>

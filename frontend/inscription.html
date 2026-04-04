@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>S'inscrire — Flashcop</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#080910;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px}
+    .container{width:100%;max-width:480px}
+    .logo{display:flex;align-items:center;gap:8px;font-size:22px;font-weight:900;color:#fff;justify-content:center;margin-bottom:32px;text-decoration:none}
+    .logo span{color:#6c63ff}
+    .box{background:#0f1119;border:1px solid #1a1d2e;border-radius:20px;padding:40px 36px}
+    h1{font-size:24px;font-weight:800;color:#e2e8f0;margin-bottom:6px}
+    .sub{color:#64748b;font-size:14px;margin-bottom:28px}
+
+    /* Plan summary */
+    .plan-card{border-radius:14px;padding:18px 20px;margin-bottom:28px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    .plan-card.starter{background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2)}
+    .plan-card.pro{background:rgba(108,99,255,.08);border:1px solid rgba(108,99,255,.2)}
+    .plan-card.premium{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2)}
+    .plan-name{font-size:15px;font-weight:700}
+    .plan-name.starter{color:#38bdf8}
+    .plan-name.pro{color:#6c63ff}
+    .plan-name.premium{color:#f59e0b}
+    .plan-features{font-size:12px;color:#64748b;margin-top:4px}
+    .plan-price{font-size:20px;font-weight:900;white-space:nowrap}
+    .plan-price.starter{color:#38bdf8}
+    .plan-price.pro{color:#6c63ff}
+    .plan-price.premium{color:#f59e0b}
+    .plan-per{font-size:11px;font-weight:400;color:#64748b}
+
+    label{display:block;color:#9ca3af;font-size:13px;margin-bottom:5px;margin-top:18px}
+    input{width:100%;padding:12px 14px;background:#080910;border:1px solid #1a1d2e;border-radius:8px;color:#e2e8f0;font-size:14px;outline:none;transition:.15s}
+    input:focus{border-color:#6c63ff}
+
+    .divider{border:none;border-top:1px solid #1a1d2e;margin:24px 0}
+
+    .secure-note{display:flex;align-items:center;gap:8px;font-size:12px;color:#64748b;margin-top:14px}
+    .secure-note svg{flex-shrink:0;color:#10b981}
+
+    .error{color:#f87171;font-size:13px;margin-top:10px;text-align:center;min-height:18px}
+
+    .btn-pay{width:100%;margin-top:20px;padding:15px;background:#6c63ff;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:800;cursor:pointer;transition:.15s;display:flex;align-items:center;justify-content:center;gap:8px}
+    .btn-pay:hover{background:#5750e3;transform:translateY(-1px)}
+    .btn-pay:disabled{opacity:.5;cursor:not-allowed;transform:none}
+    .btn-pay.starter{background:#38bdf8;color:#000}
+    .btn-pay.starter:hover{background:#0ea5e9}
+    .btn-pay.premium{background:linear-gradient(135deg,#f59e0b,#e67e22);color:#000}
+    .btn-pay.premium:hover{filter:brightness(1.1)}
+
+    .footer-link{text-align:center;margin-top:16px;font-size:13px;color:#64748b}
+    .footer-link a{color:#6c63ff}
+
+    .stripe-badge{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:14px;font-size:12px;color:#475569}
+    .stripe-badge svg{width:36px;height:15px}
+  </style>
+</head>
+<body>
+<div class="container">
+  <a href="/" class="logo">⚡ <span>Flash</span>cop</a>
+  <div class="box">
+    <h1>Créer mon compte</h1>
+    <p class="sub">Choisis ton plan, crée ton compte et paye — tout en une étape.</p>
+
+    <!-- Plan summary (filled by JS) -->
+    <div class="plan-card" id="plan-card">
+      <div>
+        <div class="plan-name" id="plan-name">—</div>
+        <div class="plan-features" id="plan-features">—</div>
+      </div>
+      <div>
+        <div class="plan-price" id="plan-price">—</div>
+        <div class="plan-per">/mois</div>
+      </div>
+    </div>
+
+    <!-- Plan picker (if no plan in URL) -->
+    <div id="plan-picker" style="display:none;margin-bottom:24px">
+      <label style="margin-top:0">Choisir un abonnement</label>
+      <div style="display:grid;gap:8px;margin-top:8px">
+        <button class="plan-pick-btn" data-plan="starter" onclick="selectPlan('starter')">Starter — 5 comptes · 10€/mois</button>
+        <button class="plan-pick-btn" data-plan="pro" onclick="selectPlan('pro')">Pro — 15 comptes · 30€/mois</button>
+        <button class="plan-pick-btn active" data-plan="premium" onclick="selectPlan('premium')">Premium — 50 comptes + AutoCop · 80€/mois</button>
+      </div>
+    </div>
+
+    <label>Email <span style="color:#f87171">*</span></label>
+    <input type="email" id="email" placeholder="votre@email.com" autocomplete="email"/>
+
+    <label>Mot de passe <span style="color:#f87171">*</span></label>
+    <input type="password" id="password" placeholder="Minimum 6 caractères" autocomplete="new-password"/>
+
+    <label>Confirmer le mot de passe <span style="color:#f87171">*</span></label>
+    <input type="password" id="password2" placeholder="Répète ton mot de passe"/>
+
+    <div class="error" id="err"></div>
+
+    <button class="btn-pay" id="btn-pay" onclick="startPayment()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+      <span id="btn-label">Payer et créer mon compte</span>
+    </button>
+
+    <div class="secure-note">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Paiement 100% sécurisé par Stripe. Tes informations sont chiffrées.
+    </div>
+
+    <div class="stripe-badge">
+      Propulsé par
+      <svg viewBox="0 0 60 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10.4 10.6c0-.8.7-1.1 1.8-1.1 1.6 0 3.6.5 5.2 1.4V6.5C15.7 5.8 13.9 5.5 12 5.5 8 5.5 5.3 7.6 5.3 11c0 5.3 7.3 4.5 7.3 6.8 0 .9-.8 1.2-2 1.2-1.7 0-3.9-.7-5.6-1.7v4.5c1.9.8 3.8 1.2 5.6 1.2 4.1 0 6.9-2 6.9-5.5-.1-5.8-7.1-4.7-7.1-6.9zM32.3 5.8l-2.8 14.4h-4.3l-2.8-14.4h4.4l1.5 9.7 1.5-9.7h2.5zM37.4 5.8H33l3 14.4h4.5l3-14.4h-4.5l-1.3 7.8-1.3-7.8zM50.4 5.8h-8v14.4h8v-3.7h-4v-2.1h3.7v-3.5H46.4V9.5h4V5.8z" fill="#6772e5"/>
+      </svg>
+    </div>
+
+    <div class="footer-link">Déjà un compte ? <a href="/login.html">Se connecter</a></div>
+  </div>
+</div>
+
+<style>
+.plan-pick-btn{width:100%;padding:12px 16px;background:#0f1119;border:1px solid #1a1d2e;border-radius:8px;color:#94a3b8;font-size:13px;font-weight:600;cursor:pointer;text-align:left;transition:.15s}
+.plan-pick-btn:hover,.plan-pick-btn.active{border-color:#6c63ff;color:#e2e8f0;background:rgba(108,99,255,.08)}
+</style>
+
+<script>
+const PLANS = {
+  starter: { name:'Starter', price:'10€', features:'5 comptes Vinted · Filtres illimités', color:'starter' },
+  pro:     { name:'Pro',     price:'30€', features:'15 comptes Vinted · Filtres illimités', color:'pro' },
+  premium: { name:'Premium', price:'80€', features:'50 comptes Vinted · AutoCop · Filtres illimités', color:'premium' },
+};
+
+let currentPlan = new URLSearchParams(window.location.search).get('plan') || '';
+
+function selectPlan(p) {
+  currentPlan = p;
+  document.querySelectorAll('.plan-pick-btn').forEach(b => b.classList.toggle('active', b.dataset.plan === p));
+  renderPlanCard();
+}
+
+function renderPlanCard() {
+  const p = PLANS[currentPlan];
+  if (!p) return;
+  const card = document.getElementById('plan-card');
+  card.className = 'plan-card ' + p.color;
+  document.getElementById('plan-name').className = 'plan-name ' + p.color;
+  document.getElementById('plan-name').textContent = p.name;
+  document.getElementById('plan-features').textContent = p.features;
+  document.getElementById('plan-price').className = 'plan-price ' + p.color;
+  document.getElementById('plan-price').textContent = p.price;
+  document.getElementById('btn-pay').className = 'btn-pay ' + p.color;
+  document.getElementById('btn-label').textContent = `Payer ${p.price}/mois et créer mon compte`;
+}
+
+// Init
+if (currentPlan && PLANS[currentPlan]) {
+  document.getElementById('plan-picker').style.display = 'none';
+  renderPlanCard();
+} else {
+  document.getElementById('plan-picker').style.display = 'block';
+  document.getElementById('plan-card').style.display = 'none';
+  currentPlan = 'pro';
+  selectPlan('pro');
+  document.getElementById('plan-card').style.display = 'flex';
+}
+
+// Pre-fill email from URL if present
+const urlEmail = new URLSearchParams(window.location.search).get('email');
+if (urlEmail) document.getElementById('email').value = urlEmail;
+
+async function startPayment() {
+  const email = document.getElementById('email').value.trim();
+  const pw = document.getElementById('password').value;
+  const pw2 = document.getElementById('password2').value;
+  const errEl = document.getElementById('err');
+  const btn = document.getElementById('btn-pay');
+  errEl.textContent = '';
+
+  if (!currentPlan || !PLANS[currentPlan]) { errEl.textContent = 'Choisis un abonnement.'; return; }
+  if (!email) { errEl.textContent = 'Entre ton adresse email.'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Adresse email invalide.'; return; }
+  if (pw.length < 6) { errEl.textContent = 'Mot de passe trop court (min 6 caractères).'; return; }
+  if (pw !== pw2) { errEl.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+
+  btn.disabled = true;
+  document.getElementById('btn-label').textContent = 'Redirection vers Stripe…';
+
+  // Store credentials temporarily in sessionStorage for post-payment use
+  sessionStorage.setItem('fc_signup', JSON.stringify({ email, password: pw, plan: currentPlan }));
+
+  try {
+    const r = await fetch('/api/payment/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan: currentPlan, customer_email: email }),
+    });
+    const data = await r.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      // Stripe not configured — create account directly (dev mode)
+      await _createAccountDirectly();
+    }
+  } catch {
+    await _createAccountDirectly();
+  }
+}
+
+async function _createAccountDirectly() {
+  // Dev/demo mode: no Stripe, create account with free plan
+  const email = document.getElementById('email').value.trim();
+  const pw = document.getElementById('password').value;
+  const errEl = document.getElementById('err');
+  try {
+    const r = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pw, license_key: '' }),
+    });
+    const data = await r.json();
+    if (!r.ok) { errEl.textContent = data.detail || 'Erreur inscription'; return; }
+    sessionStorage.removeItem('fc_signup');
+    localStorage.setItem('vbot_token', data.token);
+    localStorage.setItem('vbot_user', JSON.stringify(data.user));
+    window.location.href = '/app';
+  } catch(e) {
+    errEl.textContent = 'Erreur serveur : ' + e.message;
+  } finally {
+    document.getElementById('btn-pay').disabled = false;
+    document.getElementById('btn-label').textContent = 'Payer et créer mon compte';
+  }
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Enter') startPayment(); });
+</script>
+</body>
+</html>

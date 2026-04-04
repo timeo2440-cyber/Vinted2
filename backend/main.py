@@ -201,6 +201,24 @@ async def serve_app():
     return {"error": "Frontend not found."}
 
 
+@app.get("/inscription", include_in_schema=False)
+async def serve_inscription():
+    """Integrated signup + payment page."""
+    page = os.path.join(app_settings.frontend_dir, "inscription.html")
+    if os.path.isfile(page):
+        return FileResponse(page)
+    return FileResponse(os.path.join(app_settings.frontend_dir, "index.html"))
+
+
+@app.get("/paiement/succes", include_in_schema=False)
+async def serve_paiement_succes():
+    """Post-payment account creation page."""
+    page = os.path.join(app_settings.frontend_dir, "paiement-succes.html")
+    if os.path.isfile(page):
+        return FileResponse(page)
+    return FileResponse(os.path.join(app_settings.frontend_dir, "index.html"))
+
+
 @app.get("/{path:path}", include_in_schema=False)
 async def serve_spa(path: str):
     if path.startswith("api/") or path.startswith("ws"):
