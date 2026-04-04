@@ -85,15 +85,15 @@ const wsClient = (() => {
 
     switch (type) {
       case 'new_item':
-        handleNewItem(data);
+        // Compter les articles vus mais NE PAS les afficher dans le feed
+        // (on n'affiche que les articles qui correspondent aux filtres)
+        store.set('itemsSeen', store.get('itemsSeen') + 1);
+        document.getElementById('stat-seen').textContent = store.get('itemsSeen');
         break;
 
       case 'item_match':
-        store.updateItem(data.id, {
-          status: 'matched',
-          matched_filter_ids: [...(data.matched_filter_ids || []), data.filter_id].filter(Boolean),
-          filter_name: data.filter_name,
-        });
+        // Article correspondant à un filtre → l'ajouter au feed
+        handleMatchedItem(data);
         store.set('itemsMatched', store.get('itemsMatched') + 1);
         document.getElementById('stat-matched').textContent = store.get('itemsMatched');
         playBeep();
@@ -143,15 +143,9 @@ const wsClient = (() => {
     }
   }
 
-  function handleNewItem(data) {
-    const item = { ...data, status: data.matched_filter_ids?.length ? 'matched' : 'new', _ts: Date.now() };
+  function handleMatchedItem(data) {
+    const item = { ...data, status: 'matched', _ts: Date.now() };
     store.pushItem(item);
-
-    const seen = store.get('itemsSeen') + 1;
-    store.set('itemsSeen', seen);
-    document.getElementById('stat-seen').textContent = seen;
-
-    // Render in feed
     dashboardView.prependItem(item);
   }
 
