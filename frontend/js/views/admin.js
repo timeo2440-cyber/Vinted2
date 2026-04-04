@@ -33,6 +33,7 @@ const adminView = (() => {
     if (tab === 'users')    await _renderUsers(body);
     if (tab === 'licenses') await _renderLicenses(body);
     if (tab === 'stats')    await _renderStats(body);
+    if (tab === 'backup')   _renderBackup(body);
   }
 
   // ── Users ──────────────────────────────────────────────────────────────────
@@ -223,6 +224,35 @@ const adminView = (() => {
           <div><div class="stat-value">${stats.accounts}</div><div class="stat-label">Comptes Vinted</div></div>
         </div>
       </div>`;
+  }
+
+  function _renderBackup(container) {
+    container.innerHTML = `
+      <div style="padding:24px;max-width:500px">
+        <h3 style="color:#e2e8f0;margin-bottom:16px">Sauvegarde des données</h3>
+        <p style="color:#9ca3af;margin-bottom:24px;font-size:14px">
+          Exporte toutes les données (utilisateurs, filtres, comptes, achats) en fichier JSON.
+        </p>
+        <button id="btn-export" style="background:#6c63ff;color:#fff;border:none;padding:12px 24px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">
+          Télécharger la sauvegarde
+        </button>
+        <p id="backup-msg" style="color:#10b981;margin-top:12px;font-size:14px;display:none">Sauvegarde téléchargée !</p>
+      </div>`;
+    container.querySelector('#btn-export').addEventListener('click', async () => {
+      const token = localStorage.getItem('vbot_token');
+      const res = await fetch('/api/admin/backup/export', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+      if (!res.ok) { alert('Erreur export'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vintedbot_backup_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      container.querySelector('#backup-msg').style.display = 'block';
+    });
   }
 
   function _esc(s) {

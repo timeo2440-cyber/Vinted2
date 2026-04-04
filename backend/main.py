@@ -14,6 +14,7 @@ from ws.manager import ws_manager
 from api import filters, settings, bot_control, history, stats, logs, vinted_meta, accounts
 from api.auth import router as auth_router
 from api.admin import router as admin_router
+from api.backup import router as backup_router
 from config import settings as app_settings
 import os
 
@@ -121,6 +122,7 @@ app = FastAPI(
 # ── Routers ────────────────────────────────────────────────────────────────────
 app.include_router(auth_router)
 app.include_router(admin_router)
+app.include_router(backup_router)
 app.include_router(filters.router)
 app.include_router(settings.router)
 app.include_router(bot_control.router)
