@@ -517,12 +517,12 @@
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   z-index: 300;
-  max-height: 200px;
+  max-height: 280px;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
 }
 .brand-option {
-  padding: 8px 12px;
+  padding: 7px 12px;
   font-size: 13px;
   cursor: pointer;
   color: var(--text-primary);
@@ -530,6 +530,22 @@
 }
 .brand-option:hover { background: var(--bg-hover); }
 .brand-option-empty { padding: 8px 12px; font-size: 12px; color: var(--text-muted); cursor: default; }
+.brand-option-header {
+  padding: 6px 12px 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  border-top: 1px solid var(--border);
+  cursor: default;
+  user-select: none;
+  background: var(--bg-0);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.brand-option-header:first-child { border-top: none; }
 
 .brand-tags {
   display: flex;

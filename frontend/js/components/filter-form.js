@@ -15,33 +15,100 @@ const filterForm = (() => {
     { code: 'GB', label: 'Royaume-Uni' },
   ];
 
+  // 100+ marques populaires affichées dès le focus
+  const POPULAR_BRANDS = [
+    // Sportswear
+    {id:53,  title:'Nike'},          {id:14,  title:'Adidas'},
+    {id:27,  title:'Puma'},          {id:25,  title:'New Balance'},
+    {id:23,  title:'Converse'},      {id:24,  title:'Vans'},
+    {id:28,  title:'Reebok'},        {id:29,  title:'Under Armour'},
+    {id:131, title:'ASICS'},         {id:134, title:'On Running'},
+    {id:133, title:'Hoka'},          {id:128, title:'Arc\'teryx'},
+    {id:129, title:'Salomon'},       {id:18,  title:'The North Face'},
+    {id:19,  title:'Carhartt'},      {id:22,  title:'Champion'},
+    {id:116, title:'Y-3'},
+    // Streetwear / Hype
+    {id:16,  title:'Supreme'},       {id:17,  title:'Stone Island'},
+    {id:118, title:'Stüssy'},        {id:119, title:'Palace'},
+    {id:120, title:'Kith'},          {id:124, title:'CP Company'},
+    {id:122, title:'Amiri'},         {id:123, title:'Represent'},
+    {id:117, title:'Fear of God'},   {id:15,  title:'Off-White'},
+    // Luxe
+    {id:88,  title:'Gucci'},         {id:99,  title:'Louis Vuitton'},
+    {id:475, title:'Balenciaga'},    {id:125, title:'Moncler'},
+    {id:126, title:'Canada Goose'},  {id:1,   title:'Prada'},
+    {id:2,   title:'Chanel'},        {id:4,   title:'Dior'},
+    {id:5,   title:'Versace'},       {id:6,   title:'Givenchy'},
+    {id:7,   title:'Burberry'},      {id:8,   title:'Hermès'},
+    {id:9,   title:'Saint Laurent'}, {id:10,  title:'Valentino'},
+    {id:11,  title:'Bottega Veneta'},{id:12,  title:'Celine'},
+    {id:13,  title:'Fendi'},         {id:89,  title:'Miu Miu'},
+    {id:90,  title:'Alexander McQueen'},{id:91, title:'Moschino'},
+    {id:92,  title:'Kenzo'},         {id:93,  title:'Acne Studios'},
+    {id:94,  title:'Maison Margiela'},{id:95, title:'Rick Owens'},
+    {id:96,  title:'Comme des Garçons'},{id:97,title:'A.P.C.'},
+    {id:98,  title:'Isabel Marant'}, {id:115, title:'Jacquemus'},
+    // Casual / Fast fashion
+    {id:3,   title:'Zara'},          {id:26,  title:'H&M'},
+    {id:65,  title:'Mango'},         {id:54,  title:'Uniqlo'},
+    {id:49,  title:'Massimo Dutti'}, {id:50,  title:'COS'},
+    {id:51,  title:'& Other Stories'},{id:52, title:'Arket'},
+    {id:41,  title:'Pull&Bear'},     {id:43,  title:'Bershka'},
+    {id:42,  title:'Stradivarius'},  {id:39,  title:'ASOS'},
+    {id:55,  title:'Primark'},       {id:58,  title:'Gap'},
+    {id:64,  title:'Urban Outfitters'},{id:66,title:'Free People'},
+    // Denim / Classics
+    {id:304, title:'Levi\'s'},       {id:81,  title:'G-Star RAW'},
+    {id:82,  title:'Pepe Jeans'},    {id:83,  title:'Wrangler'},
+    {id:84,  title:'Lee'},           {id:85,  title:'Replay'},
+    {id:80,  title:'Diesel'},
+    // Lifestyle / Preppy
+    {id:1341,title:'Tommy Hilfiger'},{id:302, title:'Lacoste'},
+    {id:308, title:'Calvin Klein'},  {id:109, title:'Ralph Lauren'},
+    {id:36,  title:'BOSS'},          {id:37,  title:'Paul Smith'},
+    {id:38,  title:'Ted Baker'},     {id:71,  title:'Barbour'},
+    {id:69,  title:'Reiss'},         {id:70,  title:'AllSaints'},
+    // Chaussures
+    {id:33,  title:'Dr. Martens'},   {id:34,  title:'UGG'},
+    {id:35,  title:'Birkenstock'},   {id:32,  title:'Timberland'},
+    // Maroquinerie / Sacs
+    {id:72,  title:'Mulberry'},      {id:73,  title:'Longchamp'},
+    {id:74,  title:'Coach'},         {id:75,  title:'Michael Kors'},
+    {id:76,  title:'Kate Spade'},    {id:78,  title:'Marc Jacobs'},
+    // Français
+    {id:100, title:'Sandro'},        {id:101, title:'Maje'},
+    {id:102, title:'Ba&sh'},         {id:103, title:'The Kooples'},
+    {id:104, title:'IRO'},           {id:105, title:'Claudie Pierlot'},
+    {id:106, title:'Zadig & Voltaire'},{id:108,title:'Petit Bateau'},
+    {id:107, title:'Aigle'},         {id:114, title:'agnès b.'},
+    {id:113, title:'Comptoir des Cotonniers'},
+  ];
+
   // Module-level state — reset on each build()
-  let _selectedBrands     = [];   // [{id, title}]
-  let _selectedCategories = [];   // [{id, title, full_title}]
-  let _categoryCache      = null; // null until first successful fetch
+  let _selectedBrands     = [];
+  let _selectedCategories = [];
+  let _categoryCache      = null;
 
   function build(existing) {
     const f = existing || {};
-    const condSelected  = f.conditions    || [];
-    const countryCodes  = f.country_codes || [];
+    const condSelected = f.conditions    || [];
+    const countryCodes = f.country_codes || [];
 
-    // Restore brands from existing filter
     _selectedBrands = (f.brand_ids || []).map((id, i) => ({
       id,
       title: (f.brand_names || [])[i] || `#${id}`,
     }));
 
-    // Restore categories from existing filter
     _selectedCategories = (f.category_ids || []).map((id, i) => ({
       id,
-      title: (f.category_names || [])[i] || `#${id}`,
+      title:      (f.category_names || [])[i] || `#${id}`,
       full_title: (f.category_names || [])[i] || `#${id}`,
     }));
 
     const condHtml = CONDITIONS.map(c =>
-      `<label class="condition-option ${condSelected.includes(c.value) ? 'selected' : ''}" data-value="${c.value}">
-        <input type="checkbox" ${condSelected.includes(c.value) ? 'checked' : ''}>${c.label}
-      </label>`
+      `<div class="condition-option${condSelected.includes(c.value) ? ' selected' : ''}" data-value="${c.value}">
+        ${c.label}
+       </div>`
     ).join('');
 
     const countryOptions = COUNTRIES.map(c =>
@@ -65,7 +132,7 @@ const filterForm = (() => {
       <div class="form-group">
         <label>Marques</label>
         <div class="brand-search-wrap">
-          <input type="text" id="ff-brand-input" placeholder="Rechercher une marque…" autocomplete="off">
+          <input type="text" id="ff-brand-input" placeholder="Rechercher une marque… (cliquez pour voir les populaires)" autocomplete="off">
           <div class="brand-dropdown hidden" id="ff-brand-dropdown"></div>
         </div>
         <div class="brand-tags" id="ff-brand-tags"></div>
@@ -75,11 +142,11 @@ const filterForm = (() => {
       <div class="form-group">
         <label>Catégories</label>
         <div class="brand-search-wrap">
-          <input type="text" id="ff-cat-input" placeholder="Rechercher une catégorie… (ex: Robes, Baskets)" autocomplete="off">
+          <input type="text" id="ff-cat-input" placeholder="Rechercher (ex: Pulls, Baskets, Robes…)" autocomplete="off">
           <div class="brand-dropdown hidden" id="ff-cat-dropdown"></div>
         </div>
         <div class="brand-tags" id="ff-cat-tags"></div>
-        <small>Cliquez sur l'input pour voir toutes les catégories. Plusieurs sélections possibles.</small>
+        <small>Cliquez pour parcourir. Plusieurs catégories possibles.</small>
       </div>
 
       <div class="form-group">
@@ -92,9 +159,9 @@ const filterForm = (() => {
       </div>
 
       <div class="form-group">
-        <label>État de l'article</label>
+        <label>État de l'article <small style="font-weight:400;color:var(--text-muted)">(cliquez pour sélectionner, plusieurs possibles)</small></label>
         <div class="checkbox-group" id="ff-conditions">${condHtml}</div>
-        <small>Laisser vide = tous les états. Plusieurs états possibles.</small>
+        <small>Laisser vide = tous les états.</small>
       </div>
 
       <div class="form-group">
@@ -143,15 +210,14 @@ const filterForm = (() => {
       </div>
     `;
 
-    // ── Conditions toggle ────────────────────────────────────────────────────
+    // ── Conditions toggle (multi-select) ──────────────────────────────────────
     div.querySelectorAll('.condition-option').forEach(opt => {
       opt.addEventListener('click', () => {
         opt.classList.toggle('selected');
-        opt.querySelector('input').checked = opt.classList.contains('selected');
       });
     });
 
-    // ── Brand tags ───────────────────────────────────────────────────────────
+    // ── Brand tags ────────────────────────────────────────────────────────────
     function renderBrandTags() {
       const wrap = div.querySelector('#ff-brand-tags');
       if (!wrap) return;
@@ -170,21 +236,10 @@ const filterForm = (() => {
     }
     renderBrandTags();
 
-    // ── Brand autocomplete ───────────────────────────────────────────────────
+    // ── Brand autocomplete ────────────────────────────────────────────────────
     const brandInput    = div.querySelector('#ff-brand-input');
     const brandDropdown = div.querySelector('#ff-brand-dropdown');
     let _brandDebounce  = null;
-
-    // Popular brands shown on focus (before typing)
-    const POPULAR_BRANDS = [
-      {id:53,title:'Nike'},{id:14,title:'Adidas'},{id:3,title:'Zara'},
-      {id:26,title:'H&M'},{id:304,title:"Levi's"},{id:1341,title:'Tommy Hilfiger'},
-      {id:302,title:'Lacoste'},{id:308,title:'Calvin Klein'},{id:27,title:'Puma'},
-      {id:88,title:'Gucci'},{id:99,title:'Louis Vuitton'},{id:475,title:'Balenciaga'},
-      {id:65,title:'Mango'},{id:109,title:'Ralph Lauren'},{id:125,title:'Moncler'},
-      {id:18,title:'The North Face'},{id:19,title:'Carhartt'},{id:23,title:'Converse'},
-      {id:24,title:'Vans'},{id:25,title:'New Balance'},{id:28,title:'Reebok'},
-    ];
 
     function _renderBrandOptions(brands) {
       if (!brands || !brands.length) return;
@@ -219,25 +274,29 @@ const filterForm = (() => {
         _renderBrandOptions(POPULAR_BRANDS);
         return;
       }
+      // Filter popular brands locally first for instant feedback
+      const qLow = q.toLowerCase();
+      const localMatches = POPULAR_BRANDS.filter(b => b.title.toLowerCase().includes(qLow));
+      if (localMatches.length) _renderBrandOptions(localMatches);
 
       _brandDebounce = setTimeout(async () => {
         try {
           const { brands } = await api.searchBrands(q);
-          if (!brands || !brands.length) {
+          if (brands && brands.length) {
+            _renderBrandOptions(brands);
+          } else if (!localMatches.length) {
             brandDropdown.innerHTML = `<div class="brand-option-empty">Aucun résultat pour "${escHtml(q)}"</div>`;
             brandDropdown.classList.remove('hidden');
-          } else {
-            _renderBrandOptions(brands);
           }
-        } catch { brandDropdown.classList.add('hidden'); }
-      }, 250);
+        } catch { /* keep local results */ }
+      }, 300);
     });
 
     brandInput.addEventListener('blur', () => {
       setTimeout(() => brandDropdown.classList.add('hidden'), 200);
     });
 
-    // ── Category tags ────────────────────────────────────────────────────────
+    // ── Category tags ─────────────────────────────────────────────────────────
     function renderCategoryTags() {
       const wrap = div.querySelector('#ff-cat-tags');
       if (!wrap) return;
@@ -256,12 +315,10 @@ const filterForm = (() => {
     }
     renderCategoryTags();
 
-    // ── Category autocomplete ────────────────────────────────────────────────
+    // ── Category autocomplete ─────────────────────────────────────────────────
     const catInput    = div.querySelector('#ff-cat-input');
     const catDropdown = div.querySelector('#ff-cat-dropdown');
-    let _catDebounce  = null;
 
-    // Load categories once and cache
     (async () => {
       try {
         if (!_categoryCache) {
@@ -271,43 +328,86 @@ const filterForm = (() => {
       } catch { _categoryCache = []; }
     })();
 
-    function _showCategoryDropdown(q) {
-      if (!_categoryCache) return;
-      const filtered = q.length < 1
-        ? _categoryCache.slice(0, 30)
-        : _categoryCache.filter(c =>
-            (c.full_title || c.title || '').toLowerCase().includes(q.toLowerCase())
-          ).slice(0, 30);
+    function _addCategoryOption(catDropdown, cat) {
+      const opt = document.createElement('div');
+      opt.className = 'brand-option';
+      opt.dataset.id    = cat.id;
+      opt.dataset.title = cat.title;
+      opt.dataset.full  = cat.full_title || cat.title;
+      opt.textContent   = cat.full_title || cat.title;
+      opt.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const id = parseInt(opt.dataset.id);
+        if (!_selectedCategories.find(c => c.id === id)) {
+          _selectedCategories.push({ id, title: opt.dataset.title, full_title: opt.dataset.full });
+          renderCategoryTags();
+        }
+        catInput.value = '';
+        catDropdown.classList.add('hidden');
+      });
+      return opt;
+    }
 
-      if (!filtered.length) {
-        catDropdown.innerHTML = `<div class="brand-option-empty">Aucune catégorie trouvée</div>`;
-      } else {
-        catDropdown.innerHTML = filtered.map(c =>
-          `<div class="brand-option" data-id="${c.id}" data-title="${escHtml(c.title)}" data-full="${escHtml(c.full_title || c.title)}">${escHtml(c.full_title || c.title)}</div>`
-        ).join('');
-        catDropdown.querySelectorAll('.brand-option').forEach(opt => {
-          opt.addEventListener('mousedown', e => {
-            e.preventDefault();
-            const id = parseInt(opt.dataset.id);
-            if (!_selectedCategories.find(c => c.id === id)) {
-              _selectedCategories.push({ id, title: opt.dataset.title, full_title: opt.dataset.full });
-              renderCategoryTags();
-            }
-            catInput.value = '';
-            catDropdown.classList.add('hidden');
-          });
-        });
+    function _showCategoryDropdown(q) {
+      if (!_categoryCache) { catDropdown.classList.add('hidden'); return; }
+
+      catDropdown.innerHTML = '';
+
+      if (q.length >= 1) {
+        // Search mode: flat results
+        const qLow = q.toLowerCase();
+        const filtered = _categoryCache
+          .filter(c => (c.full_title || c.title || '').toLowerCase().includes(qLow))
+          .slice(0, 40);
+        if (!filtered.length) {
+          catDropdown.innerHTML = `<div class="brand-option-empty">Aucune catégorie pour "${escHtml(q)}"</div>`;
+        } else {
+          filtered.forEach(c => catDropdown.appendChild(_addCategoryOption(catDropdown, c)));
+        }
+        catDropdown.classList.remove('hidden');
+        return;
+      }
+
+      // Browse mode: grouped by top-level section
+      const groups = {};
+      const order  = [];
+      for (const cat of _categoryCache) {
+        const parts  = (cat.full_title || cat.title || '').split(' > ');
+        const group  = parts[0] || 'Autre';
+        if (!groups[group]) { groups[group] = []; order.push(group); }
+        groups[group].push(cat);
+      }
+
+      for (const group of order) {
+        // Section header
+        const header = document.createElement('div');
+        header.className = 'brand-option-header';
+        header.textContent = group.toUpperCase();
+        catDropdown.appendChild(header);
+
+        for (const cat of groups[group]) {
+          const opt = _addCategoryOption(catDropdown, cat);
+          // Visual indentation based on depth
+          const depth = (cat.full_title || '').split(' > ').length - 1;
+          opt.style.paddingLeft = `${8 + depth * 12}px`;
+          // Sub-categories in lighter color
+          if (depth > 1) opt.style.color = 'var(--text-muted)';
+          catDropdown.appendChild(opt);
+        }
+      }
+
+      if (!catDropdown.children.length) {
+        catDropdown.innerHTML = `<div class="brand-option-empty">Aucune catégorie disponible</div>`;
       }
       catDropdown.classList.remove('hidden');
     }
 
     catInput.addEventListener('focus', () => {
-      if (_categoryCache) _showCategoryDropdown(catInput.value.trim());
+      _showCategoryDropdown(catInput.value.trim());
     });
 
     catInput.addEventListener('input', () => {
-      clearTimeout(_catDebounce);
-      _catDebounce = setTimeout(() => _showCategoryDropdown(catInput.value.trim()), 150);
+      _showCategoryDropdown(catInput.value.trim());
     });
 
     catInput.addEventListener('blur', () => {
@@ -339,14 +439,14 @@ const filterForm = (() => {
       price_min:     parseFloat(container.querySelector('#ff-price-min').value) || null,
       price_max:     parseFloat(container.querySelector('#ff-price-max').value) || null,
       max_budget:    parseFloat(container.querySelector('#ff-budget').value)    || null,
-      conditions:    conditions.length   ? conditions   : null,
+      conditions:    conditions.length    ? conditions    : null,
       country_codes: country_codes.length ? country_codes : null,
       auto_buy:      container.querySelector('#ff-autobuy').checked,
       enabled:       container.querySelector('#ff-enabled').checked,
       brand_ids,
-      brand_names,     // display-only, stripped before API call
+      brand_names,
       category_ids,
-      category_names,  // display-only, stripped before API call
+      category_names,
     };
   }
 
