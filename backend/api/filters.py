@@ -38,6 +38,7 @@ async def _replay_filter_on_seen_items(f: Filter, user_id: int) -> None:
                 "price": item.price,
                 "brand": item.brand,
                 "brand_id": getattr(item, "brand_id", None),
+                "category_id": getattr(item, "category_id", None),
                 "size": item.size,
                 "size_id": getattr(item, "size_id", None),
                 "condition": item.condition,

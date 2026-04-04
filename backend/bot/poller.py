@@ -192,13 +192,25 @@ class ItemPoller:
                             price_from=f.price_min,
                             price_to=f.price_max,
                         )
-                        # If Vinted doesn't return IDs, tag items with the searched IDs
-                        # so filter_engine can match them correctly
+                        # Tag items with the search parameters so filter_engine
+                        # can trust Vinted's server-side filtering (handles missing
+                        # brand_id / catalog_id fields AND incorrect local IDs)
                         for item in targeted:
-                            if brand_ids and not item.get("brand_id") and len(brand_ids) == 1:
-                                item["brand_id"] = int(brand_ids[0])
-                            if category_ids and not item.get("category_id") and len(category_ids) == 1:
-                                item["category_id"] = int(category_ids[0])
+                            if brand_ids:
+                                if not item.get("brand_id") and len(brand_ids) == 1:
+                                    item["brand_id"] = int(brand_ids[0])
+                                # Always record which brands this item was fetched for
+                                existing = item.get("_targeted_brand_ids") or []
+                                item["_targeted_brand_ids"] = list(
+                                    set(existing) | {int(b) for b in brand_ids}
+                                )
+                            if category_ids:
+                                if not item.get("category_id") and len(category_ids) == 1:
+                                    item["category_id"] = int(category_ids[0])
+                                existing = item.get("_targeted_category_ids") or []
+                                item["_targeted_category_ids"] = list(
+                                    set(existing) | {int(c) for c in category_ids}
+                                )
                             if size_ids and not item.get("size_id") and len(size_ids) == 1:
                                 item["size_id"] = int(size_ids[0])
                         _add(targeted)
@@ -287,6 +299,7 @@ class ItemPoller:
                         price=item.get("price"),
                         brand=item.get("brand"),
                         brand_id=item.get("brand_id"),
+                        category_id=item.get("category_id"),
                         size=item.get("size"),
                         size_id=item.get("size_id"),
                         condition=item.get("condition"),

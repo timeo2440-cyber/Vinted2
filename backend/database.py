@@ -101,6 +101,7 @@ class SeenItem(Base):
     price: Mapped[Optional[float]] = mapped_column(Float)
     brand: Mapped[Optional[str]] = mapped_column(String(200))
     brand_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    category_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     size: Mapped[Optional[str]] = mapped_column(String(100))
     size_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     condition: Mapped[Optional[str]] = mapped_column(String(100))
@@ -217,6 +218,8 @@ async def _run_migrations():
         if await table_exists("seen_items"):
             if not await column_exists("seen_items", "brand_id"):
                 await conn.execute(text("ALTER TABLE seen_items ADD COLUMN brand_id INTEGER"))
+            if not await column_exists("seen_items", "category_id"):
+                await conn.execute(text("ALTER TABLE seen_items ADD COLUMN category_id INTEGER"))
             if not await column_exists("seen_items", "size_id"):
                 await conn.execute(text("ALTER TABLE seen_items ADD COLUMN size_id INTEGER"))
             if not await column_exists("seen_items", "condition_code"):
