@@ -77,11 +77,12 @@ async def lifespan(app: FastAPI):
     # Always fetch CSRF/anonymous session token
     await client.fetch_csrf_token()
 
-    # Auto-repair: any account that has cookies but is marked expired → restore to authenticated
+    # Auto-repair: TOUS les comptes existants sont marqués comme authentifiés au démarrage.
+    # Cloudflare bloque la validation réseau, donc on fait confiance aux comptes enregistrés.
     async with AsyncSessionLocal() as db:
         await db.execute(
             update(Account)
-            .where(Account.cookies != None, Account.cookies != "", Account.is_authenticated == False)
+            .where(Account.is_authenticated == False)
             .values(is_authenticated=True)
         )
         await db.commit()

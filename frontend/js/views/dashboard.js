@@ -1,6 +1,6 @@
 const dashboardView = (() => {
   let paused = false;
-  let matchedOnly = false;
+  let matchedOnly = true;  // Par défaut : seulement les articles correspondant aux filtres
   const MAX_CARDS = 150;
 
   function init() {
@@ -16,6 +16,7 @@ const dashboardView = (() => {
 
     const matchedToggle = document.getElementById('matched-only-toggle');
     if (matchedToggle) {
+      matchedToggle.checked = true;  // Coché par défaut
       matchedToggle.addEventListener('change', e => {
         matchedOnly = e.target.checked;
         _applyFeedFilter();
