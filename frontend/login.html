@@ -87,7 +87,7 @@ async function login(){
     if(!r.ok){errEl.textContent=data.detail||'Erreur connexion';return;}
     localStorage.setItem('vbot_token',data.token);
     localStorage.setItem('vbot_user',JSON.stringify(data.user));
-    window.location.href='/';
+    window.location.href='/app';
   }catch(e){
     errEl.textContent='Impossible de joindre le serveur : '+e.message;
   }finally{
@@ -112,7 +112,7 @@ async function register(){
     if(!r.ok){errEl.textContent=data.detail||'Erreur inscription';return;}
     localStorage.setItem('vbot_token',data.token);
     localStorage.setItem('vbot_user',JSON.stringify(data.user));
-    window.location.href='/';
+    window.location.href='/app';
   }catch(e){
     errEl.textContent='Erreur : '+e.message;
   }

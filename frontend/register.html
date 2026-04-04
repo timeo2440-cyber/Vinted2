@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Créer un compte — VintedBot</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#0a0b0f;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px}
+    .container{width:100%;max-width:860px}
+    .logo{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:800;color:#fff;justify-content:center;margin-bottom:32px}
+    .logo svg{color:#6c63ff}
+    h1{text-align:center;font-size:28px;font-weight:800;margin-bottom:8px;color:#e2e8f0}
+    .subtitle{text-align:center;color:#64748b;margin-bottom:40px;font-size:15px}
+
+    /* PLANS */
+    .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:36px}
+    @media(max-width:640px){.plans{grid-template-columns:1fr}}
+    .plan{background:#13151f;border:2px solid #1e2130;border-radius:16px;padding:24px;cursor:pointer;transition:.2s;text-align:center;position:relative}
+    .plan:hover{border-color:#6c63ff}
+    .plan.selected{border-color:var(--pc);background:rgba(var(--pcr),.08)}
+    .plan[data-plan="starter"]{--pc:#38bdf8;--pcr:56,189,248}
+    .plan[data-plan="pro"]{--pc:#6c63ff;--pcr:108,99,255}
+    .plan[data-plan="premium"]{--pc:#f59e0b;--pcr:245,158,11}
+    .plan-badge{position:absolute;top:-11px;left:50%;transform:translateX(-50%);background:#f59e0b;color:#000;font-size:10px;font-weight:800;padding:3px 12px;border-radius:20px;white-space:nowrap;display:none}
+    .plan[data-plan="premium"] .plan-badge{display:block}
+    .plan-name{font-size:16px;font-weight:800;color:var(--pc);margin-bottom:6px}
+    .plan-price{font-size:32px;font-weight:900;color:#e2e8f0;margin-bottom:4px}
+    .plan-price small{font-size:14px;font-weight:400;color:#64748b}
+    .plan-features{list-style:none;text-align:left;margin-top:14px;display:flex;flex-direction:column;gap:7px;font-size:13px;color:#94a3b8}
+    .plan-features .y{color:#e2e8f0}
+    .plan-features .g{color:#10b981}
+    .plan-check{width:22px;height:22px;border:2px solid #2a2d3e;border-radius:50%;margin:12px auto 0;display:flex;align-items:center;justify-content:center;transition:.2s}
+    .plan.selected .plan-check{background:var(--pc);border-color:var(--pc)}
+    .plan.selected .plan-check::after{content:'✓';color:#000;font-size:12px;font-weight:900}
+
+    /* FORM */
+    .form-box{background:#13151f;border:1px solid #1e2130;border-radius:16px;padding:32px;max-width:440px;margin:0 auto}
+    label{display:block;color:#9ca3af;font-size:13px;margin-bottom:6px;margin-top:16px}
+    input{width:100%;padding:12px 14px;background:#0a0b0f;border:1px solid #1e2130;border-radius:8px;color:#e2e8f0;font-size:15px;outline:none;transition:.2s}
+    input:focus{border-color:#6c63ff}
+    .selected-plan-info{background:rgba(108,99,255,.1);border:1px solid rgba(108,99,255,.3);border-radius:8px;padding:12px 16px;font-size:14px;color:#e2e8f0;margin-top:16px;display:none}
+    .error{color:#f87171;font-size:13px;margin-top:10px;text-align:center;min-height:18px}
+    button[type=submit]{width:100%;margin-top:20px;padding:14px;background:#6c63ff;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;transition:.2s}
+    button[type=submit]:hover{background:#5a52e0}
+    button[type=submit]:disabled{opacity:.5;cursor:not-allowed}
+    .login-link{text-align:center;margin-top:16px;font-size:13px;color:#64748b}
+    .login-link a{color:#6c63ff}
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+    </svg>
+    Vinted<strong>Bot</strong>
+  </div>
+  <h1>Créer mon compte</h1>
+  <p class="subtitle">Choisis ton abonnement puis crée ton compte</p>
+
+  <!-- PLAN SELECTION -->
+  <div class="plans">
+    <div class="plan" data-plan="starter" onclick="selectPlan('starter')">
+      <div class="plan-name">Starter</div>
+      <div class="plan-price">10<small>€/mois</small></div>
+      <ul class="plan-features">
+        <li class="y">✓ 2 comptes Vinted</li>
+        <li class="y">✓ 5 filtres</li>
+        <li class="y">✓ Surveillance 24/7</li>
+        <li>✗ Autocop</li>
+      </ul>
+      <div class="plan-check"></div>
+    </div>
+    <div class="plan" data-plan="pro" onclick="selectPlan('pro')">
+      <div class="plan-name">Pro</div>
+      <div class="plan-price">30<small>€/mois</small></div>
+      <ul class="plan-features">
+        <li class="y">✓ 5 comptes Vinted</li>
+        <li class="y">✓ 15 filtres</li>
+        <li class="y">✓ Surveillance 24/7</li>
+        <li>✗ Autocop</li>
+      </ul>
+      <div class="plan-check"></div>
+    </div>
+    <div class="plan" data-plan="premium" onclick="selectPlan('premium')">
+      <div class="plan-badge">MEILLEUR</div>
+      <div class="plan-name">Premium</div>
+      <div class="plan-price">80<small>€/mois</small></div>
+      <ul class="plan-features">
+        <li class="y">✓ 20 comptes Vinted</li>
+        <li class="y">✓ 50 filtres</li>
+        <li class="y">✓ Surveillance 24/7</li>
+        <li class="g">✓ <strong>Autocop</strong></li>
+      </ul>
+      <div class="plan-check"></div>
+    </div>
+  </div>
+
+  <!-- REGISTER FORM -->
+  <div class="form-box">
+    <div class="selected-plan-info" id="plan-info"></div>
+    <label>Email</label>
+    <input type="email" id="email" placeholder="votre@email.com" autocomplete="email"/>
+    <label>Mot de passe</label>
+    <input type="password" id="password" placeholder="Minimum 6 caractères" autocomplete="new-password"/>
+    <label>Confirmer le mot de passe</label>
+    <input type="password" id="password2" placeholder="Répète ton mot de passe"/>
+    <div class="error" id="err"></div>
+    <button type="submit" id="btn" onclick="register()" disabled>Sélectionne un plan d'abord</button>
+    <div class="login-link">Déjà un compte ? <a href="/login.html">Se connecter</a></div>
+  </div>
+</div>
+
+<script>
+let selectedPlan = null;
+const planNames = { starter: 'Starter — 10€/mois', pro: 'Pro — 30€/mois', premium: 'Premium — 80€/mois' };
+
+// Pre-select plan from URL ?plan=xxx
+const urlPlan = new URLSearchParams(window.location.search).get('plan');
+if (urlPlan) selectPlan(urlPlan);
+
+function selectPlan(plan) {
+  selectedPlan = plan;
+  document.querySelectorAll('.plan').forEach(el => {
+    el.classList.toggle('selected', el.dataset.plan === plan);
+  });
+  const info = document.getElementById('plan-info');
+  info.style.display = 'block';
+  info.textContent = 'Plan sélectionné : ' + planNames[plan];
+  const btn = document.getElementById('btn');
+  btn.disabled = false;
+  btn.textContent = 'Créer mon compte — ' + planNames[plan];
+}
+
+async function register() {
+  const email = document.getElementById('email').value.trim();
+  const pw = document.getElementById('password').value;
+  const pw2 = document.getElementById('password2').value;
+  const errEl = document.getElementById('err');
+  const btn = document.getElementById('btn');
+
+  errEl.textContent = '';
+  if (!selectedPlan) { errEl.textContent = 'Sélectionne un plan.'; return; }
+  if (!email) { errEl.textContent = 'Entre ton email.'; return; }
+  if (pw.length < 6) { errEl.textContent = 'Mot de passe trop court (min 6 caractères).'; return; }
+  if (pw !== pw2) { errEl.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Création en cours…';
+
+  try {
+    const r = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pw, requested_plan: selectedPlan })
+    });
+    const text = await r.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { detail: text }; }
+    if (!r.ok) { errEl.textContent = data.detail || 'Erreur inscription'; return; }
+    localStorage.setItem('vbot_token', data.token);
+    localStorage.setItem('vbot_user', JSON.stringify(data.user));
+    window.location.href = '/app';
+  } catch(e) {
+    errEl.textContent = 'Erreur serveur : ' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.addEventListener('keydown', e => { if(e.key==='Enter' && !document.getElementById('btn').disabled) register(); });
+</script>
+</body>
+</html>

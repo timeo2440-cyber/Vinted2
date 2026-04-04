@@ -182,7 +182,17 @@ if os.path.isdir(frontend_dir):
 
 
 @app.get("/", include_in_schema=False)
-async def serve_index():
+async def serve_landing():
+    """Landing page for unauthenticated visitors."""
+    landing = os.path.join(app_settings.frontend_dir, "landing.html")
+    if os.path.isfile(landing):
+        return FileResponse(landing)
+    return FileResponse(os.path.join(app_settings.frontend_dir, "index.html"))
+
+
+@app.get("/app", include_in_schema=False)
+async def serve_app():
+    """Main app (requires login)."""
     index = os.path.join(app_settings.frontend_dir, "index.html")
     if os.path.isfile(index):
         return FileResponse(index)
@@ -197,4 +207,5 @@ async def serve_spa(path: str):
     file_path = os.path.join(app_settings.frontend_dir, path)
     if os.path.isfile(file_path):
         return FileResponse(file_path)
+    # For /app/* routes, serve the SPA
     return FileResponse(os.path.join(app_settings.frontend_dir, "index.html"))
