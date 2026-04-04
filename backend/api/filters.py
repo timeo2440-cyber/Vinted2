@@ -1,4 +1,5 @@
 import json
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +10,46 @@ from auth_deps import get_current_user, check_plan_limit
 
 router = APIRouter(prefix="/api/filters", tags=["filters"])
 _engine = FilterEngine()
+
+
+async def _replay_filter_on_seen_items(f: Filter, user_id: int) -> None:
+    """
+    After a filter is created/updated, immediately replay it against the last
+    500 seen items and send item_match WS events for anything that matches.
+    This fills the feed instantly instead of waiting for the next poll cycle.
+    """
+    from ws.manager import ws_manager
+
+    async with __import__('database').AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(SeenItem).order_by(SeenItem.first_seen_at.desc()).limit(500)
+        )
+        items = result.scalars().all()
+
+    matched = 0
+    for item in items:
+        item_dict = {
+            "id": item.vinted_id,
+            "title": item.title,
+            "price": item.price,
+            "brand": item.brand,
+            "brand_id": item.brand_id,
+            "size": item.size,
+            "size_id": item.size_id,
+            "condition": item.condition,
+            "condition_code": getattr(item, "condition_code", None),
+            "photo_url": item.photo_url,
+            "item_url": item.item_url,
+            "country_code": item.country_code,
+        }
+        if _engine.match_item(item_dict, f):
+            await ws_manager.broadcast_item_match(
+                item_dict, f.id, f.name, user_id=user_id
+            )
+            matched += 1
+            if matched >= 50:   # max 50 retroactive matches to not spam the feed
+                break
+
 
 
 def _serialize_filter(f: Filter) -> FilterOut:
@@ -98,6 +139,11 @@ async def create_filter(
     db.add(f)
     await db.commit()
     await db.refresh(f)
+
+    # Replay immediately on already-seen items so the feed isn't empty
+    if f.enabled:
+        asyncio.create_task(_replay_filter_on_seen_items(f, user.id))
+
     return _serialize_filter(f)
 
 
@@ -130,6 +176,8 @@ async def replace_filter(
     _apply_filter_data(f, payload.model_dump())
     await db.commit()
     await db.refresh(f)
+    if f.enabled:
+        asyncio.create_task(_replay_filter_on_seen_items(f, user.id))
     return _serialize_filter(f)
 
 
@@ -151,6 +199,8 @@ async def update_filter(
     _apply_filter_data(f, data)
     await db.commit()
     await db.refresh(f)
+    if f.enabled:
+        asyncio.create_task(_replay_filter_on_seen_items(f, user.id))
     return _serialize_filter(f)
 
 

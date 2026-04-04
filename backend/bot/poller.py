@@ -290,6 +290,7 @@ class ItemPoller:
             await db.commit()
 
         # Match items against filters and broadcast
+        cycle_matches = 0
         for item in new_items:
             matched_filter_ids = []
             for f in all_filters:
@@ -303,6 +304,7 @@ class ItemPoller:
             for f in all_filters:
                 if self.filter_engine.match_item(item, f):
                     self.items_matched += 1
+                    cycle_matches += 1
                     await self.ws.broadcast_item_match(item, f.id, f.name, user_id=f.user_id)
                     if f.auto_buy:
                         async with AsyncSessionLocal() as db:
@@ -317,6 +319,16 @@ class ItemPoller:
                             asyncio.create_task(
                                 self.buy_engine.attempt_buy(item, f, user_id=f.user_id)
                             )
+
+        # Log cycle summary (every cycle so the user can see activity)
+        if new_items or cycle_matches:
+            filters_desc = f"{len(all_filters)} filtre(s)" if all_filters else "aucun filtre"
+            await self._log(
+                "info" if cycle_matches else "info",
+                f"Cycle : {len(new_items)} nouveaux articles scannés"
+                + (f", {cycle_matches} correspondance(s) trouvée(s) !" if cycle_matches else f" — 0 correspondance ({filters_desc})"),
+                "poller",
+            )
 
         await asyncio.sleep(max(0, poll_interval - 0.5))
 
