@@ -6,7 +6,7 @@ from typing import Optional
 from sqlalchemy import select
 from database import AsyncSessionLocal, Filter, SeenItem, Setting, ActivityLog, UserSetting
 from vinted.client import VintedClient
-from vinted.catalog import fetch_newest_items
+from vinted.catalog import fetch_newest_items, search_items
 from vinted.exceptions import VintedAuthError, VintedRateLimitError, VintedNetworkError
 from bot.filter_engine import FilterEngine
 from bot.buy_engine import BuyEngine
@@ -117,6 +117,112 @@ class ItemPoller:
                 await self._log("error", f"Erreur inattendue : {e}", "poller")
                 await asyncio.sleep(5)
 
+    def _parse_ids(self, val) -> list:
+        """Parse a JSON list of IDs stored as string in the DB."""
+        if not val:
+            return []
+        if isinstance(val, list):
+            return val
+        try:
+            parsed = json.loads(val)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+
+    async def _fetch_all_items(self, all_filters: list) -> dict:
+        """
+        Smart multi-source fetch:
+        1. Generic newest items (broad coverage)
+        2. One targeted fetch per unique (brand_ids, category_ids) combo
+        3. One keyword search per unique keyword string
+        Returns a dict {item_id: item} — deduplicated.
+        """
+        items_map: dict = {}
+
+        def _add(items_list):
+            for item in items_list:
+                iid = item.get("id")
+                if iid:
+                    items_map[str(iid)] = item
+
+        # 1. Generic fetch (always)
+        try:
+            generic = await fetch_newest_items(self.client, per_page=96)
+            _add(generic)
+        except (VintedAuthError, VintedRateLimitError):
+            raise
+        except Exception as e:
+            await self._log("warn", f"Fetch générique échoué: {e}", "poller")
+
+        if not all_filters:
+            return items_map
+
+        # 2. Targeted fetches — collect unique search param sets
+        seen_param_keys = set()
+        targeted_calls = 0
+        MAX_TARGETED = 5  # max extra API calls per cycle to avoid rate limits
+
+        for f in all_filters:
+            if targeted_calls >= MAX_TARGETED:
+                break
+
+            brand_ids = self._parse_ids(f.brand_ids)
+            category_ids = self._parse_ids(f.category_ids)
+            size_ids = self._parse_ids(f.size_ids)
+            keywords = (f.keywords or "").strip()
+
+            # --- Targeted ID-based fetch ---
+            if brand_ids or category_ids or size_ids:
+                # Deduplicate identical param combos
+                key = (
+                    tuple(sorted(brand_ids)),
+                    tuple(sorted(category_ids)),
+                    tuple(sorted(size_ids)),
+                )
+                if key not in seen_param_keys:
+                    seen_param_keys.add(key)
+                    try:
+                        await asyncio.sleep(0.3)  # Small delay between calls
+                        targeted = await fetch_newest_items(
+                            self.client,
+                            per_page=48,
+                            brand_ids=[int(b) for b in brand_ids] if brand_ids else None,
+                            category_ids=[int(c) for c in category_ids] if category_ids else None,
+                            size_ids=[int(s) for s in size_ids] if size_ids else None,
+                            price_from=f.price_min,
+                            price_to=f.price_max,
+                        )
+                        _add(targeted)
+                        targeted_calls += 1
+                        logger.debug(
+                            f"Targeted fetch (brands={brand_ids}, cats={category_ids}): "
+                            f"{len(targeted)} articles"
+                        )
+                    except (VintedAuthError, VintedRateLimitError):
+                        raise
+                    except Exception as e:
+                        logger.warning(f"Targeted fetch failed: {e}")
+
+            # --- Keyword search ---
+            elif keywords:
+                kw_key = keywords.lower()
+                if kw_key not in seen_param_keys:
+                    seen_param_keys.add(kw_key)
+                    try:
+                        await asyncio.sleep(0.3)
+                        kw_items = await search_items(self.client, query=keywords, per_page=48)
+                        _add(kw_items)
+                        targeted_calls += 1
+                        logger.debug(
+                            f"Keyword search '{keywords}': {len(kw_items)} articles"
+                        )
+                    except (VintedAuthError, VintedRateLimitError):
+                        raise
+                    except Exception as e:
+                        logger.warning(f"Keyword search failed: {e}")
+
+        return items_map
+
     async def _poll_cycle(self) -> None:
         async with AsyncSessionLocal() as db:
             # Load ALL enabled filters from ALL users
@@ -127,7 +233,9 @@ class ItemPoller:
             poll_ms_setting = poll_ms_row.scalar_one_or_none()
             poll_interval = int(poll_ms_setting.value) / 1000 if poll_ms_setting and poll_ms_setting.value else 2.0
 
-        items = await fetch_newest_items(self.client, per_page=96)
+        # Smart multi-source fetch
+        items_map = await self._fetch_all_items(all_filters)
+        items = list(items_map.values())
 
         if not items:
             self._empty_cycles += 1
@@ -181,24 +289,22 @@ class ItemPoller:
                     ))
             await db.commit()
 
-        # Build per-user matched filter ids for the broadcast
+        # Match items against filters and broadcast
         for item in new_items:
             matched_filter_ids = []
             for f in all_filters:
                 if self.filter_engine.match_item(item, f):
                     matched_filter_ids.append(f.id)
 
-            # Broadcast new item to all users (global feed)
+            # Broadcast new item counter to all users
             await self.ws.broadcast_new_item(item, matched_filter_ids)
 
-            # Per-user: notify matches and trigger auto-buy
+            # Per-user match events + optional auto-buy
             for f in all_filters:
                 if self.filter_engine.match_item(item, f):
                     self.items_matched += 1
-                    # Send match notification only to this filter's owner
                     await self.ws.broadcast_item_match(item, f.id, f.name, user_id=f.user_id)
                     if f.auto_buy:
-                        # Check user's autocop setting
                         async with AsyncSessionLocal() as db:
                             row = await db.execute(
                                 select(UserSetting).where(
