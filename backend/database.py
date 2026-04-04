@@ -69,6 +69,7 @@ class Filter(Base):
     keywords: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     category_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     brand_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    brand_names: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     size_ids: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     conditions: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     price_min: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -207,6 +208,11 @@ async def _run_migrations():
                 await conn.execute(text("ALTER TABLE seen_items ADD COLUMN size_id INTEGER"))
             if not await column_exists("seen_items", "condition_code"):
                 await conn.execute(text("ALTER TABLE seen_items ADD COLUMN condition_code TEXT"))
+
+        # Add brand_names to filters if missing
+        if await table_exists("filters"):
+            if not await column_exists("filters", "brand_names"):
+                await conn.execute(text("ALTER TABLE filters ADD COLUMN brand_names TEXT"))
 
 
 async def init_db():

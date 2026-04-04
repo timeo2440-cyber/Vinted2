@@ -13,6 +13,7 @@ class FilterCreate(BaseModel):
     keywords: Optional[str] = None
     category_ids: Optional[list[int]] = None
     brand_ids: Optional[list[int]] = None
+    brand_names: Optional[list[str]] = None
     size_ids: Optional[list[int]] = None
     conditions: Optional[list[str]] = None
     price_min: Optional[float] = None
@@ -28,6 +29,7 @@ class FilterUpdate(BaseModel):
     keywords: Optional[str] = None
     category_ids: Optional[list[int]] = None
     brand_ids: Optional[list[int]] = None
+    brand_names: Optional[list[str]] = None
     size_ids: Optional[list[int]] = None
     conditions: Optional[list[str]] = None
     price_min: Optional[float] = None
@@ -44,6 +46,7 @@ class FilterOut(BaseModel):
     keywords: Optional[str]
     category_ids: Optional[list[int]]
     brand_ids: Optional[list[int]]
+    brand_names: Optional[list[str]]
     size_ids: Optional[list[int]]
     conditions: Optional[list[str]]
     price_min: Optional[float]

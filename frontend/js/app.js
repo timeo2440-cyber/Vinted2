@@ -8,36 +8,64 @@ window.diagTest = async function() {
     const token = localStorage.getItem('vbot_token') || '';
     const headers = { 'Authorization': 'Bearer ' + token };
 
-    const [stats, ping] = await Promise.all([
+    const [stats, ping, filtersResp] = await Promise.all([
       fetch('/api/bot/seen-count', { headers }).then(r => r.json()),
       fetch('/api/bot/ping-ws', { method: 'POST', headers }).then(r => r.json()),
+      fetch('/api/filters', { headers }).then(r => r.json()).catch(() => []),
     ]);
 
+    const filters = Array.isArray(filtersResp) ? filtersResp : [];
+    const activeFilters = filters.filter(f => f.enabled);
+
+    // Build filter summary
+    let filterInfo = '';
+    if (filters.length === 0) {
+      filterInfo = `<span style="color:#f87171">✗ Aucun filtre créé — va dans "Filtres" et crée un filtre !</span>`;
+    } else if (activeFilters.length === 0) {
+      filterInfo = `<span style="color:#fbbf24">⚠ ${filters.length} filtre(s) créé(s) mais aucun actif</span>`;
+    } else {
+      filterInfo = `<span style="color:#10b981">✓ ${activeFilters.length} filtre(s) actif(s)</span> : ` +
+        activeFilters.map(f => {
+          const parts = [];
+          if (f.keywords) parts.push(`mots-clés:"${f.keywords}"`);
+          if (f.brand_ids && f.brand_ids.length) parts.push(`${f.brand_ids.length} marque(s)`);
+          if (f.category_ids && f.category_ids.length) parts.push(`${f.category_ids.length} catégorie(s)`);
+          if (f.price_max) parts.push(`max ${f.price_max}€`);
+          return `<b>${f.name}</b>${parts.length ? ' [' + parts.join(', ') + ']' : ' [aucun critère → match tout]'}`;
+        }).join(', ');
+    }
+
+    const wsOk = ping.ws_connections > 0;
     const lines = [
       `<b>Diagnostic Flashcop</b>`,
       ``,
+      `Bot actif : <b>${stats.bot_running ? '✓ OUI' : '<span style="color:#f87171">✗ NON</span>'}</b>`,
       `Articles scannés en DB : <b>${stats.seen_items_in_db}</b>`,
       `Articles vus cette session : <b>${stats.items_seen_this_session}</b>`,
       `Correspondances cette session : <b>${stats.items_matched_this_session}</b>`,
-      `Bot actif : <b>${stats.bot_running ? '✓ OUI' : '✗ NON'}</b>`,
       ``,
-      `Connexions WS totales : <b>${stats.ws_connections_total}</b>`,
-      `Connexions WS pour toi : <b>${stats.ws_connections_for_you}</b>`,
+      `WebSocket : <b>${wsOk ? '<span style="color:#10b981">✓ OK</span>' : '<span style="color:#f87171">✗ NON CONNECTÉ</span>'}</b>`,
       ``,
-      ping.ws_connections > 0
-        ? `<span style="color:#10b981">✓ WS OK — un article test a été envoyé, vérifie le feed !</span>`
-        : `<span style="color:#f87171">✗ WS non authentifié — déconnecte-toi et reconnecte-toi</span>`,
+      `Filtres : ${filterInfo}`,
+      ``,
     ];
 
+    if (!wsOk) {
+      lines.push(`<span style="color:#f87171">→ WS non connecté : déconnecte-toi et reconnecte-toi</span>`);
+    } else if (filters.length === 0) {
+      lines.push(`<span style="color:#fbbf24">→ Crée un filtre dans l'onglet "Filtres" pour voir des articles</span>`);
+      lines.push(`<span style="color:#fbbf24">→ Essaie avec juste un mot-clé (ex: "nike" ou "jordan")</span>`);
+    } else if (activeFilters.length > 0 && stats.items_matched_this_session === 0) {
+      lines.push(`<span style="color:#fbbf24">→ Filtre actif mais 0 correspondance : vérifie que les critères ne sont pas trop restrictifs</span>`);
+      lines.push(`<span style="color:#fbbf24">→ Essaie un filtre sans critères (juste un nom) = il matchera tout</span>`);
+    } else if (wsOk) {
+      lines.push(`<span style="color:#10b981">→ WS OK : un article test a été injecté dans le feed ci-dessous !</span>`);
+    }
+
     if (typeof modal !== 'undefined') {
-      modal.open('Diagnostic', `<div style="font-size:14px;line-height:2;font-family:monospace">${lines.join('<br>')}</div>`);
+      modal.open('Diagnostic', `<div style="font-size:13px;line-height:1.8;font-family:monospace">${lines.join('<br>')}</div>`);
     } else {
-      alert(
-        `Articles en DB: ${stats.seen_items_in_db}\n` +
-        `Bot actif: ${stats.bot_running ? 'OUI' : 'NON'}\n` +
-        `Connexions WS pour toi: ${stats.ws_connections_for_you}\n` +
-        (ping.ws_connections > 0 ? '✓ WS OK - vérifie le feed!' : '✗ WS non auth - reconnecte-toi')
-      );
+      alert(lines.map(l => l.replace(/<[^>]+>/g, '')).join('\n'));
     }
   } catch(e) {
     alert('Erreur diagnostic: ' + e.message);

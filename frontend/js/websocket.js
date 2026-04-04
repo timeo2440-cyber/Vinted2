@@ -147,6 +147,9 @@ const wsClient = (() => {
     const item = { ...data, status: 'matched', _ts: Date.now() };
     store.pushItem(item);
     dashboardView.prependItem(item);
+    // Toast for immediate visibility
+    const label = item.filter_name ? ` [${item.filter_name}]` : '';
+    toast.show(`⚡ Match${label} : ${item.title || 'Article'} — ${item.price != null ? item.price + '€' : ''}`, 'success');
   }
 
   function startPing() {

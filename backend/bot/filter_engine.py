@@ -29,11 +29,24 @@ class FilterEngine:
         if category_ids and not self._match_list(str(item.get("category_id", "")), [str(c) for c in category_ids]):
             return False
 
-        # Brand check — match by numeric ID or text fallback
+        # Brand check — match by numeric ID, with text fallback if ID missing
         brand_ids = self._parse_json_list(get("brand_ids"))
         if brand_ids:
             item_brand_id = str(item.get("brand_id") or "")
-            if not self._match_list(item_brand_id, [str(b) for b in brand_ids]):
+            if item_brand_id and self._match_list(item_brand_id, [str(b) for b in brand_ids]):
+                pass  # matched by ID
+            elif not item_brand_id:
+                # No brand_id on item — fall back to text matching via brand_names
+                brand_names = self._parse_json_list(get("brand_names"))
+                if brand_names:
+                    item_brand = (item.get("brand") or "").lower()
+                    if not any(bn.lower() in item_brand or item_brand in bn.lower() for bn in brand_names if bn):
+                        return False
+                else:
+                    # No brand_names stored either — can't match, skip brand check
+                    pass
+            else:
+                # Has brand_id but doesn't match
                 return False
 
         # Size check — match by numeric ID

@@ -143,10 +143,10 @@ const filtersView = (() => {
   }
 
   function openFilterModal(existing) {
-    // Enrich with cached display names
+    // Enrich with display names (API now returns brand_names; fallback to local cache)
     const enriched = existing ? {
       ...existing,
-      brand_names:    _brandNamesCache.get(existing.id)    || [],
+      brand_names:    existing.brand_names?.length ? existing.brand_names : (_brandNamesCache.get(existing.id) || []),
       category_names: _categoryNamesCache.get(existing.id) || [],
     } : null;
 
@@ -159,25 +159,20 @@ const filtersView = (() => {
       const data = filterForm.read(formEl);
       if (!data) return;
 
-      // Strip display-only fields before sending to API
-      const brandNames    = data.brand_names;
-      const categoryNames = data.category_names;
+      // category_names is display-only; brand_names is now saved to DB for matching
       const payload = { ...data };
-      delete payload.brand_names;
       delete payload.category_names;
 
       try {
         let savedFilter;
         if (existing) {
           savedFilter = await api.replaceFilter(existing.id, payload);
-          if (brandNames?.length)    _brandNamesCache.set(existing.id, brandNames);
-          if (categoryNames?.length) _categoryNamesCache.set(existing.id, categoryNames);
+          if (payload.brand_names?.length) _brandNamesCache.set(existing.id, payload.brand_names);
           toast.show('Filtre mis à jour.', 'success');
         } else {
           savedFilter = await api.createFilter(payload);
-          if (savedFilter?.id) {
-            if (brandNames?.length)    _brandNamesCache.set(savedFilter.id, brandNames);
-            if (categoryNames?.length) _categoryNamesCache.set(savedFilter.id, categoryNames);
+          if (savedFilter?.id && payload.brand_names?.length) {
+            _brandNamesCache.set(savedFilter.id, payload.brand_names);
           }
           toast.show('Filtre créé.', 'success');
         }

@@ -96,6 +96,7 @@ def _serialize_filter(f: Filter) -> FilterOut:
         keywords=f.keywords,
         category_ids=parse_json(f.category_ids),
         brand_ids=parse_json(f.brand_ids),
+        brand_names=parse_json(f.brand_names),
         size_ids=parse_json(f.size_ids),
         conditions=parse_json(f.conditions),
         price_min=f.price_min,
@@ -111,7 +112,7 @@ def _apply_filter_data(f: Filter, data: dict) -> None:
         if field in data and data[field] is not None:
             setattr(f, field, data[field])
 
-    for list_field in ["category_ids", "brand_ids", "size_ids", "conditions", "country_codes"]:
+    for list_field in ["category_ids", "brand_ids", "brand_names", "size_ids", "conditions", "country_codes"]:
         if list_field in data:
             val = data[list_field]
             setattr(f, list_field, json.dumps(val) if val is not None else None)
@@ -157,7 +158,7 @@ async def create_filter(
         price_min=payload.price_min,
         price_max=payload.price_max,
     )
-    for list_field in ["category_ids", "brand_ids", "size_ids", "conditions", "country_codes"]:
+    for list_field in ["category_ids", "brand_ids", "brand_names", "size_ids", "conditions", "country_codes"]:
         val = getattr(payload, list_field)
         setattr(f, list_field, json.dumps(val) if val is not None else None)
     db.add(f)

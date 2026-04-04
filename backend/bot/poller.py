@@ -192,6 +192,15 @@ class ItemPoller:
                             price_from=f.price_min,
                             price_to=f.price_max,
                         )
+                        # If Vinted doesn't return IDs, tag items with the searched IDs
+                        # so filter_engine can match them correctly
+                        for item in targeted:
+                            if brand_ids and not item.get("brand_id") and len(brand_ids) == 1:
+                                item["brand_id"] = int(brand_ids[0])
+                            if category_ids and not item.get("category_id") and len(category_ids) == 1:
+                                item["category_id"] = int(category_ids[0])
+                            if size_ids and not item.get("size_id") and len(size_ids) == 1:
+                                item["size_id"] = int(size_ids[0])
                         _add(targeted)
                         targeted_calls += 1
                         logger.debug(
