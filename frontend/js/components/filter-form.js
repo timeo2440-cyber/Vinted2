@@ -84,10 +84,147 @@ const filterForm = (() => {
     {id:113, title:'Comptoir des Cotonniers'},
   ];
 
-  // Module-level state — reset on each build()
+  // ── Arbre de catégories (accordéon, style Vinted) ──────────────────────────
+  const CATEGORY_TREE = [
+    { title: 'Femmes', children: [
+      { title: 'Hauts', children: [
+        {id:1904,title:'T-shirts'},{id:2050,title:'Chemises'},{id:4,title:'Pulls & sweats'},
+        {id:3,title:'Hoodies'},{id:1913,title:'Cardigans'},{id:1912,title:'Blouses'},
+        {id:1906,title:'Débardeurs & tops'},{id:1914,title:'Crop tops'},
+      ]},
+      { title: 'Robes', children: [
+        {id:1607,title:'Toutes les robes'},{id:1916,title:'Robes courtes'},
+        {id:1917,title:'Robes longues'},{id:1918,title:'Robes mi-longues'},
+      ]},
+      { title: 'Bas', children: [
+        {id:1609,title:'Jeans'},{id:1608,title:'Pantalons'},{id:1610,title:'Jupes'},
+        {id:1617,title:'Shorts'},{id:1920,title:'Leggings'},{id:1921,title:'Joggings'},
+      ]},
+      { title: 'Manteaux & Vestes', children: [
+        {id:6,title:'Vestes'},{id:7,title:'Manteaux'},{id:1925,title:'Doudounes'},
+        {id:1926,title:'Trench-coats'},{id:1927,title:'Blazers'},{id:1928,title:'Parkas'},
+        {id:2072,title:'Bombers'},
+      ]},
+      { title: 'Combinaisons & Maillots', children: [
+        {id:1619,title:'Combinaisons'},{id:1621,title:'Maillots de bain'},{id:1622,title:'Lingerie'},
+      ]},
+      { title: 'Chaussures', children: [
+        {id:16,title:'Baskets'},{id:1634,title:'Escarpins'},{id:1635,title:'Bottes & bottines'},
+        {id:1636,title:'Sandales'},{id:1637,title:'Ballerines'},{id:1638,title:'Mocassins'},
+        {id:1940,title:'Mules & sabots'},{id:1941,title:'Sport'},
+      ]},
+      { title: 'Sacs', children: [
+        {id:1624,title:'Sacs à main'},{id:1625,title:'Sacs à dos'},
+        {id:1626,title:'Sacs bandoulière'},{id:1945,title:'Pochettes'},{id:1946,title:'Tote bags'},
+      ]},
+      { title: 'Accessoires', children: [
+        {id:1630,title:'Bijoux'},{id:1628,title:'Lunettes'},{id:1629,title:'Ceintures'},
+        {id:1631,title:'Chapeaux & casquettes'},{id:1633,title:'Écharpes & foulards'},
+        {id:1950,title:'Montres'},{id:1951,title:'Gants'},
+      ]},
+    ]},
+    { title: 'Hommes', children: [
+      { title: 'Hauts', children: [
+        {id:1206,title:'T-shirts'},{id:2,title:'Chemises'},{id:1207,title:'Pulls & sweats'},
+        {id:1208,title:'Hoodies'},{id:2060,title:'Débardeurs'},{id:2061,title:'Polos'},
+      ]},
+      { title: 'Bas', children: [
+        {id:1212,title:'Jeans'},{id:1213,title:'Pantalons'},{id:1214,title:'Shorts'},
+        {id:1215,title:'Joggings'},
+      ]},
+      { title: 'Manteaux & Vestes', children: [
+        {id:1209,title:'Vestes'},{id:1210,title:'Manteaux'},{id:1211,title:'Doudounes'},
+        {id:2070,title:'Parkas'},{id:2071,title:'Blazers'},{id:2072,title:'Bombers'},
+        {id:2073,title:'Trench-coats'},
+      ]},
+      { title: 'Costumes', children: [{id:1216,title:'Costumes & smokings'}]},
+      { title: 'Chaussures', children: [
+        {id:1217,title:'Baskets'},{id:1218,title:'Bottines & boots'},{id:1219,title:'Mocassins'},
+        {id:1220,title:'Sandales'},{id:2080,title:'Sport'},{id:2081,title:'Derbies & richelieus'},
+      ]},
+      { title: 'Sacs & Accessoires', children: [
+        {id:2085,title:'Sacs à dos'},{id:2086,title:'Bananes'},{id:1221,title:'Sacs'},
+        {id:1222,title:'Ceintures'},{id:1223,title:'Lunettes'},{id:1224,title:'Montres'},
+        {id:1225,title:'Casquettes & chapeaux'},{id:1226,title:'Écharpes'},{id:2090,title:'Bijoux'},
+      ]},
+      { title: 'Sous-vêtements', children: [
+        {id:2095,title:'Sous-vêtements'},{id:2096,title:'Chaussettes'},{id:2097,title:'Maillots de bain'},
+      ]},
+    ]},
+    { title: 'Enfants', children: [
+      { title: 'Bébé (0-24 mois)', children: [
+        {id:1231,title:'Vêtements'},{id:1232,title:'Chaussures'},{id:2101,title:'Accessoires'},
+      ]},
+      { title: 'Garçons', children: [
+        {id:1233,title:'T-shirts'},{id:2102,title:'Pantalons'},{id:2103,title:'Vestes'},{id:2104,title:'Chaussures'},
+      ]},
+      { title: 'Filles', children: [
+        {id:1234,title:'Robes'},{id:2105,title:'T-shirts'},{id:2106,title:'Pantalons'},{id:2107,title:'Chaussures'},
+      ]},
+      { title: 'Autres', children: [
+        {id:1236,title:'Chaussures enfant'},{id:1237,title:'Jouets & Jeux'},{id:1238,title:'Livres'},{id:2110,title:'Puériculture'},
+      ]},
+    ]},
+    { title: 'Maison', children: [
+      { title: 'Décoration', children: [
+        {id:1781,title:'Décoration'},{id:2120,title:'Bougies & senteurs'},{id:2121,title:'Tableaux & art'},{id:2122,title:'Textiles déco'},
+      ]},
+      { title: 'Mobilier & Cuisine', children: [
+        {id:1785,title:'Meubles'},{id:1786,title:'Luminaires'},{id:1782,title:'Linge de maison'},
+        {id:1783,title:'Vaisselle'},{id:1784,title:'Électroménager'},{id:1787,title:'Jardin & Plantes'},
+      ]},
+    ]},
+    { title: 'Sport', children: [
+      { title: 'Vêtements & Chaussures', children: [
+        {id:2390,title:'Vêtements sport'},{id:2391,title:'Chaussures sport'},
+      ]},
+      { title: 'Équipements & Sports', children: [
+        {id:2392,title:'Équipement'},{id:2393,title:'Vélos'},{id:2394,title:'Ski & Snowboard'},
+        {id:2395,title:'Football'},{id:2396,title:'Running'},{id:2398,title:'Tennis'},
+        {id:2399,title:'Yoga & Fitness'},{id:2400,title:'Randonnée'},
+      ]},
+    ]},
+    { title: 'Divertissement', children: [
+      { title: 'Médias', children: [
+        {id:1901,title:'Livres'},{id:1902,title:'Musique (CD, vinyles)'},{id:1903,title:'Films & Séries'},
+        {id:2131,title:'BD & Manga'},
+      ]},
+      { title: 'Jeux', children: [
+        {id:1905,title:'Jeux vidéo'},{id:1906,title:'Consoles'},{id:2130,title:'Jeux de société'},
+      ]},
+    ]},
+    { title: 'Électronique', children: [
+      { title: 'Appareils', children: [
+        {id:2640,title:'Téléphones'},{id:2641,title:'Tablettes'},{id:2642,title:'Ordinateurs'},
+        {id:2643,title:'Appareils photo'},
+      ]},
+      { title: 'Audio & Accessoires', children: [
+        {id:2644,title:'Casques & écouteurs'},{id:2645,title:'Enceintes'},{id:2646,title:'Accessoires tech'},
+      ]},
+    ]},
+    { title: 'Beauté', children: [
+      { title: 'Soins & Maquillage', children: [
+        {id:2200,title:'Parfums'},{id:2201,title:'Soins visage'},{id:2202,title:'Soins corps'},
+        {id:2203,title:'Maquillage'},{id:2204,title:'Soins cheveux'},
+      ]},
+    ]},
+  ];
+
+  // ── Flat list (pour la recherche texte) ────────────────────────────────────
+  function _flattenTree(nodes, parent = '') {
+    const result = [];
+    for (const node of nodes) {
+      const full = parent ? `${parent} > ${node.title}` : node.title;
+      if (node.id) result.push({ id: node.id, title: node.title, full_title: full });
+      if (node.children) result.push(..._flattenTree(node.children, full));
+    }
+    return result;
+  }
+  const CATEGORY_FLAT = _flattenTree(CATEGORY_TREE);
+
+  // ── Module-level state — reset on each build() ────────────────────────────
   let _selectedBrands     = [];
   let _selectedCategories = [];
-  let _categoryCache      = null;
 
   function build(existing) {
     const f = existing || {};
@@ -141,12 +278,17 @@ const filterForm = (() => {
 
       <div class="form-group">
         <label>Catégories</label>
-        <div class="brand-search-wrap">
-          <input type="text" id="ff-cat-input" placeholder="Rechercher (ex: Pulls, Baskets, Robes…)" autocomplete="off">
-          <div class="brand-dropdown hidden" id="ff-cat-dropdown"></div>
+        <div class="cat-wrap" id="ff-cat-wrap">
+          <input type="text" id="ff-cat-input" placeholder="Cliquez pour parcourir ou tapez pour chercher…" autocomplete="off" readonly>
+          <div class="cat-panel hidden" id="ff-cat-panel">
+            <div class="cat-search-row">
+              <input type="text" id="ff-cat-search" placeholder="🔍 Rechercher une catégorie…" autocomplete="off">
+            </div>
+            <div class="cat-tree" id="ff-cat-tree"></div>
+          </div>
         </div>
         <div class="brand-tags" id="ff-cat-tags"></div>
-        <small>Cliquez pour parcourir. Plusieurs catégories possibles.</small>
+        <small>Plusieurs catégories possibles.</small>
       </div>
 
       <div class="form-group">
@@ -315,103 +457,194 @@ const filterForm = (() => {
     }
     renderCategoryTags();
 
-    // ── Category autocomplete ─────────────────────────────────────────────────
-    const catInput    = div.querySelector('#ff-cat-input');
-    const catDropdown = div.querySelector('#ff-cat-dropdown');
+    // ── Category accordion panel ──────────────────────────────────────────────
+    const catWrap  = div.querySelector('#ff-cat-wrap');
+    const catInput = div.querySelector('#ff-cat-input');
+    const catPanel = div.querySelector('#ff-cat-panel');
+    const catSearch= div.querySelector('#ff-cat-search');
+    const catTree  = div.querySelector('#ff-cat-tree');
 
-    (async () => {
-      try {
-        if (!_categoryCache) {
-          const { categories } = await api.getCategories();
-          _categoryCache = categories || [];
-        }
-      } catch { _categoryCache = []; }
-    })();
-
-    function _addCategoryOption(catDropdown, cat) {
-      const opt = document.createElement('div');
-      opt.className = 'brand-option';
-      opt.dataset.id    = cat.id;
-      opt.dataset.title = cat.title;
-      opt.dataset.full  = cat.full_title || cat.title;
-      opt.textContent   = cat.full_title || cat.title;
-      opt.addEventListener('mousedown', e => {
-        e.preventDefault();
-        const id = parseInt(opt.dataset.id);
-        if (!_selectedCategories.find(c => c.id === id)) {
-          _selectedCategories.push({ id, title: opt.dataset.title, full_title: opt.dataset.full });
-          renderCategoryTags();
-        }
-        catInput.value = '';
-        catDropdown.classList.add('hidden');
-      });
-      return opt;
+    function _selectCategory(id, title, full) {
+      if (!_selectedCategories.find(c => c.id === id)) {
+        _selectedCategories.push({ id, title, full_title: full });
+        renderCategoryTags();
+      }
+      _closeCatPanel();
     }
 
-    function _showCategoryDropdown(q) {
-      if (!_categoryCache) { catDropdown.classList.add('hidden'); return; }
+    function _openCatPanel() {
+      catPanel.classList.remove('hidden');
+      catSearch.focus();
+      _renderTree(CATEGORY_TREE);
+    }
 
-      catDropdown.innerHTML = '';
+    function _closeCatPanel() {
+      catPanel.classList.add('hidden');
+      catSearch.value = '';
+    }
 
-      if (q.length >= 1) {
-        // Search mode: flat results
-        const qLow = q.toLowerCase();
-        const filtered = _categoryCache
-          .filter(c => (c.full_title || c.title || '').toLowerCase().includes(qLow))
-          .slice(0, 40);
-        if (!filtered.length) {
-          catDropdown.innerHTML = `<div class="brand-option-empty">Aucune catégorie pour "${escHtml(q)}"</div>`;
+    // Build accordion tree
+    function _renderTree(nodes, parent = '') {
+      catTree.innerHTML = '';
+      nodes.forEach(node => {
+        const full = parent ? `${parent} > ${node.title}` : node.title;
+        const hasChildren = node.children && node.children.length;
+
+        const section = document.createElement('div');
+        section.className = 'cat-section';
+
+        const header = document.createElement('div');
+        header.className = 'cat-section-header';
+
+        if (hasChildren) {
+          const arrow = document.createElement('span');
+          arrow.className = 'cat-arrow';
+          arrow.innerHTML = '&#9654;'; // ▶
+          header.appendChild(arrow);
         } else {
-          filtered.forEach(c => catDropdown.appendChild(_addCategoryOption(catDropdown, c)));
+          header.style.paddingLeft = '26px';
         }
-        catDropdown.classList.remove('hidden');
+
+        const label = document.createElement('span');
+        label.textContent = node.title;
+        header.appendChild(label);
+
+        // Leaf node or parent (both selectable)
+        if (node.id) {
+          header.classList.add('cat-selectable');
+          header.addEventListener('click', () => _selectCategory(node.id, node.title, full));
+        }
+
+        if (hasChildren) {
+          const childWrap = document.createElement('div');
+          childWrap.className = 'cat-children hidden';
+
+          node.children.forEach(child => {
+            const childFull = `${full} > ${child.title}`;
+            if (child.children && child.children.length) {
+              // Sub-section
+              const subSection = document.createElement('div');
+              subSection.className = 'cat-section';
+
+              const subHeader = document.createElement('div');
+              subHeader.className = 'cat-section-header cat-sub-header';
+              const subArrow = document.createElement('span');
+              subArrow.className = 'cat-arrow';
+              subArrow.innerHTML = '&#9654;';
+              subHeader.appendChild(subArrow);
+              subHeader.appendChild(Object.assign(document.createElement('span'), {textContent: child.title}));
+
+              const subChildren = document.createElement('div');
+              subChildren.className = 'cat-children hidden';
+
+              child.children.forEach(leaf => {
+                const leafFull = `${childFull} > ${leaf.title}`;
+                const leafEl = document.createElement('div');
+                leafEl.className = 'cat-item';
+                leafEl.textContent = leaf.title;
+                leafEl.addEventListener('click', () => _selectCategory(leaf.id, leaf.title, leafFull));
+                subChildren.appendChild(leafEl);
+              });
+
+              subHeader.addEventListener('click', () => {
+                const open = !subChildren.classList.contains('hidden');
+                subChildren.classList.toggle('hidden', open);
+                subArrow.classList.toggle('open', !open);
+              });
+
+              subSection.appendChild(subHeader);
+              subSection.appendChild(subChildren);
+              childWrap.appendChild(subSection);
+            } else {
+              // Leaf
+              const leafEl = document.createElement('div');
+              leafEl.className = 'cat-item';
+              leafEl.textContent = child.title;
+              leafEl.addEventListener('click', () => _selectCategory(child.id, child.title, childFull));
+              childWrap.appendChild(leafEl);
+            }
+          });
+
+          header.addEventListener('click', (e) => {
+            if (node.id) return; // selectable nodes don't expand on click
+            const open = !childWrap.classList.contains('hidden');
+            childWrap.classList.toggle('hidden', open);
+            header.querySelector('.cat-arrow').classList.toggle('open', !open);
+          });
+
+          // For non-leaf sections, clicking arrow expands
+          const arrow = header.querySelector('.cat-arrow');
+          if (arrow && !node.id) {
+            arrow.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const open = !childWrap.classList.contains('hidden');
+              childWrap.classList.toggle('hidden', open);
+              arrow.classList.toggle('open', !open);
+            });
+          } else if (arrow && node.id) {
+            // Parent that is also selectable: arrow expands, label selects
+            header.addEventListener('click', (e) => {});
+            arrow.addEventListener('click', (e) => {
+              e.stopPropagation();
+              const open = !childWrap.classList.contains('hidden');
+              childWrap.classList.toggle('hidden', open);
+              arrow.classList.toggle('open', !open);
+            });
+            label.addEventListener('click', (e) => {
+              e.stopPropagation();
+              _selectCategory(node.id, node.title, full);
+            });
+          }
+
+          section.appendChild(header);
+          section.appendChild(childWrap);
+        } else {
+          section.appendChild(header);
+        }
+
+        catTree.appendChild(section);
+      });
+    }
+
+    // Search in flat list
+    function _renderSearch(q) {
+      catTree.innerHTML = '';
+      const qLow = q.toLowerCase();
+      const matches = CATEGORY_FLAT.filter(c =>
+        (c.full_title || c.title || '').toLowerCase().includes(qLow)
+      ).slice(0, 50);
+
+      if (!matches.length) {
+        catTree.innerHTML = `<div style="padding:10px 14px;color:var(--text-muted);font-size:13px">Aucun résultat</div>`;
         return;
       }
-
-      // Browse mode: grouped by top-level section
-      const groups = {};
-      const order  = [];
-      for (const cat of _categoryCache) {
-        const parts  = (cat.full_title || cat.title || '').split(' > ');
-        const group  = parts[0] || 'Autre';
-        if (!groups[group]) { groups[group] = []; order.push(group); }
-        groups[group].push(cat);
-      }
-
-      for (const group of order) {
-        // Section header
-        const header = document.createElement('div');
-        header.className = 'brand-option-header';
-        header.textContent = group.toUpperCase();
-        catDropdown.appendChild(header);
-
-        for (const cat of groups[group]) {
-          const opt = _addCategoryOption(catDropdown, cat);
-          // Visual indentation based on depth
-          const depth = (cat.full_title || '').split(' > ').length - 1;
-          opt.style.paddingLeft = `${8 + depth * 12}px`;
-          // Sub-categories in lighter color
-          if (depth > 1) opt.style.color = 'var(--text-muted)';
-          catDropdown.appendChild(opt);
-        }
-      }
-
-      if (!catDropdown.children.length) {
-        catDropdown.innerHTML = `<div class="brand-option-empty">Aucune catégorie disponible</div>`;
-      }
-      catDropdown.classList.remove('hidden');
+      matches.forEach(c => {
+        const el = document.createElement('div');
+        el.className = 'cat-item cat-search-result';
+        el.innerHTML = `<span style="color:var(--text-muted);font-size:11px">${escHtml((c.full_title||'').split(' > ').slice(0,-1).join(' > '))}</span>
+          <span style="margin-left:4px">${escHtml(c.title)}</span>`;
+        el.addEventListener('click', () => _selectCategory(c.id, c.title, c.full_title));
+        catTree.appendChild(el);
+      });
     }
 
-    catInput.addEventListener('focus', () => {
-      _showCategoryDropdown(catInput.value.trim());
+    catInput.addEventListener('click', () => {
+      if (catPanel.classList.contains('hidden')) _openCatPanel();
+      else _closeCatPanel();
     });
 
-    catInput.addEventListener('input', () => {
-      _showCategoryDropdown(catInput.value.trim());
+    catSearch.addEventListener('input', () => {
+      const q = catSearch.value.trim();
+      if (q.length >= 1) _renderSearch(q);
+      else _renderTree(CATEGORY_TREE);
     });
 
-    catInput.addEventListener('blur', () => {
-      setTimeout(() => catDropdown.classList.add('hidden'), 200);
+    // Close on outside click
+    document.addEventListener('mousedown', function onOutside(e) {
+      if (!catWrap.contains(e.target)) {
+        _closeCatPanel();
+        document.removeEventListener('mousedown', onOutside);
+      }
     });
 
     return div;

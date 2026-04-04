@@ -398,6 +398,73 @@
 .condition-option input { display: none; }
 .condition-option.selected { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
 
+/* ── Category accordion ───────────────────────────────────────────────────── */
+.cat-wrap { position: relative; }
+.cat-wrap #ff-cat-input { cursor: pointer; }
+.cat-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  z-index: 400;
+  max-height: 360px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.cat-panel.hidden { display: none; }
+.cat-search-row { padding: 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.cat-search-row input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-0);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.cat-tree { overflow-y: auto; flex: 1; }
+.cat-section { border-bottom: 1px solid var(--border-subtle, var(--border)); }
+.cat-section:last-child { border-bottom: none; }
+.cat-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-primary);
+  transition: background 0.1s;
+}
+.cat-section-header:hover { background: var(--bg-hover); }
+.cat-sub-header { font-weight: 500; padding: 7px 12px 7px 24px; font-size: 13px; }
+.cat-selectable:hover { background: var(--accent-dim); color: var(--accent); }
+.cat-arrow {
+  font-size: 9px;
+  display: inline-block;
+  transition: transform 0.18s;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.cat-arrow.open { transform: rotate(90deg); }
+.cat-children { padding-left: 12px; }
+.cat-children.hidden { display: none; }
+.cat-item {
+  padding: 7px 12px 7px 36px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-secondary, var(--text-primary));
+  transition: background 0.1s;
+  border-radius: var(--radius-sm);
+}
+.cat-item:hover { background: var(--bg-hover); color: var(--accent); }
+.cat-search-result { padding: 7px 12px; padding-left: 14px; }
+
 .filter-form .switch-row {
   display: flex;
   align-items: center;
