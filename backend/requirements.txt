@@ -2,6 +2,7 @@ fastapi>=0.111.0
 uvicorn>=0.29.0
 curl_cffi>=0.7.0
 sqlalchemy>=2.0.29
+greenlet>=3.0.0
 aiosqlite>=0.20.0
 python-dotenv>=1.0.1
 pydantic>=2.7.1
