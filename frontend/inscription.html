@@ -94,6 +94,24 @@
     <label>Confirmer le mot de passe <span style="color:#f87171">*</span></label>
     <input type="password" id="password2" placeholder="Répète ton mot de passe"/>
 
+    <!-- Promo code -->
+    <div style="margin-top:20px">
+      <label style="margin-top:0;display:flex;align-items:center;gap:6px">
+        Code promo
+        <span style="color:#64748b;font-weight:400;font-size:11px">(optionnel)</span>
+      </label>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <input type="text" id="promo-input" placeholder="Ex: BETA" autocomplete="off"
+          oninput="this.value=this.value.toUpperCase()"
+          style="flex:1;letter-spacing:.08em"/>
+        <button type="button" id="promo-btn" onclick="applyPromo()"
+          style="padding:0 18px;background:#1a1d2e;border:1px solid #2a2d3e;border-radius:8px;color:#94a3b8;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:.15s;flex-shrink:0">
+          Appliquer
+        </button>
+      </div>
+      <div id="promo-result" style="margin-top:8px;font-size:13px;min-height:18px"></div>
+    </div>
+
     <div class="error" id="err"></div>
 
     <button class="btn-pay" id="btn-pay" onclick="startPayment()">
@@ -101,7 +119,7 @@
       <span id="btn-label">Payer et créer mon compte</span>
     </button>
 
-    <div class="secure-note">
+    <div class="secure-note" id="secure-note">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
       Paiement 100% sécurisé par Stripe. Tes informations sont chiffrées.
     </div>
@@ -128,6 +146,8 @@ const PLANS = {
   pro:     { name:'Pro',     price:'30€', features:'15 comptes Vinted · Filtres illimités', color:'pro' },
   premium: { name:'Premium', price:'80€', features:'50 comptes Vinted · AutoCop · Filtres illimités', color:'premium' },
 };
+
+let appliedPromo = null; // { code, discount_percent, plan, free, description }
 
 let currentPlan = new URLSearchParams(window.location.search).get('plan') || '';
 
@@ -167,6 +187,67 @@ if (currentPlan && PLANS[currentPlan]) {
 const urlEmail = new URLSearchParams(window.location.search).get('email');
 if (urlEmail) document.getElementById('email').value = urlEmail;
 
+async function applyPromo() {
+  const code = document.getElementById('promo-input').value.trim().toUpperCase();
+  const resultEl = document.getElementById('promo-result');
+  const btn = document.getElementById('promo-btn');
+  if (!code) { resultEl.innerHTML = '<span style="color:#f87171">Saisis un code promo.</span>'; return; }
+
+  btn.disabled = true;
+  btn.textContent = '…';
+  resultEl.textContent = '';
+
+  try {
+    const r = await fetch('/api/payment/apply-promo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, plan: currentPlan || 'pro' }),
+    });
+    const data = await r.json();
+
+    if (!r.ok) {
+      resultEl.innerHTML = `<span style="color:#f87171">❌ ${data.detail || 'Code invalide'}</span>`;
+      appliedPromo = null;
+      _resetPayButton();
+      return;
+    }
+
+    appliedPromo = data;
+
+    if (data.free) {
+      // 100% off — no payment needed
+      resultEl.innerHTML = `<span style="color:#10b981">✅ Code <b>${data.code}</b> appliqué — accès <b>gratuit</b> ! ${data.description ? '(' + data.description + ')' : ''}</span>`;
+      const btn = document.getElementById('btn-pay');
+      btn.style.background = '#10b981';
+      btn.style.color = '#fff';
+      document.getElementById('btn-label').textContent = 'Créer mon compte gratuitement →';
+      document.getElementById('secure-note').style.display = 'none';
+      document.querySelector('.stripe-badge').style.display = 'none';
+    } else {
+      // Partial discount
+      resultEl.innerHTML = `<span style="color:#10b981">✅ Code <b>${data.code}</b> — ${data.discount_percent}% de réduction (${data.final_price}€/mois)</span>`;
+      document.getElementById('btn-label').textContent = `Payer ${data.final_price}€/mois et créer mon compte`;
+    }
+  } catch(e) {
+    resultEl.innerHTML = `<span style="color:#f87171">Erreur : ${e.message}</span>`;
+    appliedPromo = null;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Appliquer';
+  }
+}
+
+function _resetPayButton() {
+  const p = PLANS[currentPlan];
+  if (!p) return;
+  const btn = document.getElementById('btn-pay');
+  btn.style.background = '';
+  btn.style.color = '';
+  document.getElementById('btn-label').textContent = `Payer ${p.price}/mois et créer mon compte`;
+  document.getElementById('secure-note').style.display = '';
+  document.querySelector('.stripe-badge').style.display = '';
+}
+
 async function startPayment() {
   const email = document.getElementById('email').value.trim();
   const pw = document.getElementById('password').value;
@@ -182,9 +263,32 @@ async function startPayment() {
   if (pw !== pw2) { errEl.textContent = 'Les mots de passe ne correspondent pas.'; return; }
 
   btn.disabled = true;
-  document.getElementById('btn-label').textContent = 'Redirection vers Stripe…';
 
-  // Store credentials temporarily in sessionStorage for post-payment use
+  // ── Promo 100% off → skip Stripe entirely ─────────────────────────────────
+  if (appliedPromo && appliedPromo.free) {
+    document.getElementById('btn-label').textContent = 'Création du compte…';
+    try {
+      const r = await fetch('/api/payment/register-with-promo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: appliedPromo.code, email, password: pw, plan: currentPlan }),
+      });
+      const data = await r.json();
+      if (!r.ok) { errEl.textContent = data.detail || 'Erreur inscription'; btn.disabled = false; _resetPayButton(); return; }
+      localStorage.setItem('vbot_token', data.token);
+      localStorage.setItem('vbot_user', JSON.stringify(data.user));
+      window.location.href = '/app';
+      return;
+    } catch(e) {
+      errEl.textContent = 'Erreur serveur : ' + e.message;
+      btn.disabled = false;
+      _resetPayButton();
+      return;
+    }
+  }
+
+  // ── Normal Stripe flow ─────────────────────────────────────────────────────
+  document.getElementById('btn-label').textContent = 'Redirection vers Stripe…';
   sessionStorage.setItem('fc_signup', JSON.stringify({ email, password: pw, plan: currentPlan }));
 
   try {
@@ -197,7 +301,6 @@ async function startPayment() {
     if (data.url) {
       window.location.href = data.url;
     } else {
-      // Stripe not configured — create account directly (dev mode)
       await _createAccountDirectly();
     }
   } catch {

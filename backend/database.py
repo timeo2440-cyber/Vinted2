@@ -52,6 +52,19 @@ class LicenseKey(Base):
     created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
     used_at: Mapped[Optional[DateTime]] = mapped_column(DateTime, nullable=True)
 
+
+class PromoCode(Base):
+    __tablename__ = "promo_codes"
+
+    code: Mapped[str] = mapped_column(String(50), primary_key=True)
+    discount_percent: Mapped[int] = mapped_column(Integer, default=0)   # 0-100
+    plan_override: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)   # force a plan (null = keep chosen)
+    max_uses: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)           # null = unlimited
+    current_uses: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    description: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, server_default=func.now())
+
     @staticmethod
     def generate() -> str:
         return secrets.token_urlsafe(32)
@@ -214,6 +227,21 @@ async def _run_migrations():
             if not await column_exists("filters", "brand_names"):
                 await conn.execute(text("ALTER TABLE filters ADD COLUMN brand_names TEXT"))
 
+        # Create promo_codes table if missing (new feature)
+        if not await table_exists("promo_codes"):
+            await conn.execute(text("""
+                CREATE TABLE promo_codes (
+                    code TEXT PRIMARY KEY,
+                    discount_percent INTEGER DEFAULT 0,
+                    plan_override TEXT,
+                    max_uses INTEGER,
+                    current_uses INTEGER DEFAULT 0,
+                    is_active INTEGER DEFAULT 1,
+                    description TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+
 
 async def init_db():
     await _run_migrations()
@@ -249,6 +277,21 @@ async def init_db():
             if not result.scalar_one_or_none():
                 session.add(Setting(key=key, value=value))
         await session.commit()
+
+    # Seed default promo codes
+    async with AsyncSessionLocal() as session:
+        from sqlalchemy import select
+        existing = await session.execute(select(PromoCode).where(PromoCode.code == "BETA"))
+        if not existing.scalar_one_or_none():
+            session.add(PromoCode(
+                code="BETA",
+                discount_percent=100,
+                plan_override=None,   # keeps the plan the user chose
+                max_uses=None,        # unlimited during beta
+                is_active=True,
+                description="Accès bêta gratuit — tous les plans inclus",
+            ))
+            await session.commit()
 
 
 async def get_db():

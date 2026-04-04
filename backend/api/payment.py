@@ -1,11 +1,13 @@
 """
 Stripe payment endpoints.
 Flow: landing → /payer?plan=starter → Stripe Checkout → /paiement/succes?session_id=xxx → licence key affichée
+Alt flow (promo 100%): inscription.html → /api/payment/apply-promo → /api/payment/register-with-promo
 """
 from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel
+from typing import Optional
 from config import settings
 
 router = APIRouter(prefix="/api/payment", tags=["payment"])
@@ -134,11 +136,130 @@ async def get_session_license(session_id: str, plan: str = "starter"):
     return {"key": key, "plan": plan}
 
 
+class ApplyPromoBody(BaseModel):
+    code: str
+    plan: str = "starter"
+
+
+class RegisterWithPromoBody(BaseModel):
+    code: str
+    email: str
+    password: str
+    plan: str = "starter"
+
+
 class CompleteSignupBody(BaseModel):
     session_id: str
     email: str
     password: str
     plan: str = "starter"
+
+
+@router.post("/apply-promo")
+async def apply_promo(body: ApplyPromoBody):
+    """Validate a promo code. Returns discount info without creating anything."""
+    from database import AsyncSessionLocal, PromoCode
+    from sqlalchemy import select
+
+    code = body.code.strip().upper()
+    plan = body.plan
+
+    if plan not in PRICES:
+        raise HTTPException(400, "Plan invalide")
+
+    async with AsyncSessionLocal() as db:
+        row = await db.execute(select(PromoCode).where(PromoCode.code == code))
+        promo = row.scalar_one_or_none()
+
+    if not promo or not promo.is_active:
+        raise HTTPException(404, "Code promo invalide ou expiré")
+
+    if promo.max_uses is not None and promo.current_uses >= promo.max_uses:
+        raise HTTPException(410, "Ce code promo a atteint son nombre d'utilisations maximum")
+
+    effective_plan = promo.plan_override or plan
+    original_price = PRICES[plan]["amount"] / 100      # in €
+    discount_amount = original_price * promo.discount_percent / 100
+    final_price = max(0.0, original_price - discount_amount)
+
+    return {
+        "valid": True,
+        "code": promo.code,
+        "discount_percent": promo.discount_percent,
+        "plan": effective_plan,
+        "original_price": original_price,
+        "final_price": round(final_price, 2),
+        "description": promo.description or "",
+        "free": promo.discount_percent >= 100,
+    }
+
+
+@router.post("/register-with-promo")
+async def register_with_promo(body: RegisterWithPromoBody):
+    """
+    Register a user using a valid promo code.
+    Only works when promo discount = 100% (free access).
+    """
+    if not body.email or not body.password:
+        raise HTTPException(400, "Email et mot de passe requis")
+    if len(body.password) < 6:
+        raise HTTPException(400, "Mot de passe trop court (min 6 caractères)")
+    if body.plan not in PRICES:
+        raise HTTPException(400, "Plan invalide")
+
+    code = body.code.strip().upper()
+
+    # Validate promo
+    from database import AsyncSessionLocal, PromoCode, User, LicenseKey
+    from sqlalchemy import select, func
+
+    async with AsyncSessionLocal() as db:
+        row = await db.execute(select(PromoCode).where(PromoCode.code == code))
+        promo = row.scalar_one_or_none()
+
+    if not promo or not promo.is_active:
+        raise HTTPException(404, "Code promo invalide ou expiré")
+    if promo.max_uses is not None and promo.current_uses >= promo.max_uses:
+        raise HTTPException(410, "Code promo épuisé")
+    if promo.discount_percent < 100:
+        raise HTTPException(400, "Ce code promo ne couvre pas l'intégralité du paiement")
+
+    effective_plan = promo.plan_override or body.plan
+
+    import bcrypt as _bcrypt
+    from auth_deps import create_token
+    from api.auth import _serialize_user
+
+    async with AsyncSessionLocal() as db:
+        # Idempotent: if already registered, just log in
+        existing = await db.execute(select(User).where(User.email == body.email.lower().strip()))
+        existing_user = existing.scalar_one_or_none()
+        if existing_user:
+            token = create_token(existing_user.id, existing_user.role)
+            return {"token": token, "user": _serialize_user(existing_user)}
+
+        count_res = await db.execute(select(func.count()).select_from(User))
+        user_count = count_res.scalar()
+        is_first = user_count == 0
+
+        plan = "unlimited" if is_first else effective_plan
+        role = "admin" if is_first else "user"
+
+        password_hash = _bcrypt.hashpw(body.password.encode()[:72], _bcrypt.gensalt()).decode()
+        user = User(email=body.email.lower().strip(), password_hash=password_hash, role=role, plan=plan)
+        db.add(user)
+        await db.flush()
+
+        # Increment promo usage
+        promo_row = await db.get(PromoCode, code)
+        if promo_row:
+            promo_row.current_uses += 1
+
+        await db.commit()
+        await db.refresh(user)
+
+    token = create_token(user.id, user.role)
+    return {"token": token, "user": _serialize_user(user)}
 
 
 @router.post("/complete-signup")
