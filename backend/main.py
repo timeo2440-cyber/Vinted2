@@ -35,7 +35,7 @@ async def _ensure_admin():
         if result.scalar_one_or_none():
             return  # Already have users
 
-        admin_email = os.environ.get("ADMIN_EMAIL", "admin@vintedbot.com")
+        admin_email = os.environ.get("ADMIN_EMAIL", "admin@flashcop.com")
         admin_password = os.environ.get("ADMIN_PASSWORD", "Admin1234!")
         password_hash = _bcrypt.hashpw(admin_password.encode()[:72], _bcrypt.gensalt()).decode()
         admin = User(
@@ -114,7 +114,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Vinted AutoBot",
+    title="Flashcop",
     description="Auto-buy bot for Vinted — SaaS multi-tenant",
     version="2.0.0",
     lifespan=lifespan,

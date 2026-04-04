@@ -248,7 +248,7 @@ const adminView = (() => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `vintedbot_backup_${new Date().toISOString().slice(0,10)}.json`;
+      a.download = `flashcop_backup_${new Date().toISOString().slice(0,10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
       container.querySelector('#backup-msg').style.display = 'block';

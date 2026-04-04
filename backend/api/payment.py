@@ -11,9 +11,9 @@ from config import settings
 router = APIRouter(prefix="/api/payment", tags=["payment"])
 
 PRICES = {
-    "starter": {"amount": 1000, "label": "VintedBot Starter — 10€/mois"},
-    "pro":     {"amount": 3000, "label": "VintedBot Pro — 30€/mois"},
-    "premium": {"amount": 8000, "label": "VintedBot Premium — 80€/mois"},
+    "starter": {"amount": 1000, "label": "Flashcop Starter — 10€/mois"},
+    "pro":     {"amount": 3000, "label": "Flashcop Pro — 30€/mois"},
+    "premium": {"amount": 8000, "label": "Flashcop Premium — 80€/mois"},
 }
 
 

@@ -72,5 +72,5 @@ async def export_data(admin=Depends(get_current_admin)):
         ],
     }
     return JSONResponse(content=data, headers={
-        "Content-Disposition": f'attachment; filename="vintedbot_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json"'
+        "Content-Disposition": f'attachment; filename="flashcop_backup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json"'
     })
