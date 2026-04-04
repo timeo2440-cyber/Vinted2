@@ -66,6 +66,7 @@ const filtersView = (() => {
       <div class="filter-card-actions">
         <button class="btn-ghost btn-sm btn-edit">Modifier</button>
         <button class="btn-ghost btn-sm btn-test">Tester</button>
+        <button class="btn-ghost btn-sm btn-debug" title="Voir pourquoi les articles matchent ou non">🔍 Debug</button>
         <button class="btn-danger btn-sm btn-delete">Supprimer</button>
       </div>
     `;
@@ -103,6 +104,9 @@ const filtersView = (() => {
 
     // Test
     card.querySelector('.btn-test').addEventListener('click', () => testFilter(f));
+
+    // Debug
+    card.querySelector('.btn-debug').addEventListener('click', () => debugFilter(f));
 
     // Delete
     card.querySelector('.btn-delete').addEventListener('click', () => deleteFilter(f, card));
@@ -212,6 +216,50 @@ const filtersView = (() => {
       modal.open(`Résultats du test — ${escHtml(f.name)}`, html);
     } catch (e) {
       toast.show('Erreur test : ' + e.message, 'error');
+    }
+  }
+
+  async function debugFilter(f) {
+    toast.show('Debug en cours — fetch Vinted live…', 'info', 3000);
+    try {
+      const result = await api.debugFilter(f.id);
+
+      if (result.error) {
+        modal.open('Debug — Erreur', `<pre style="font-size:12px;color:#f87171">${escHtml(result.error)}</pre>`);
+        return;
+      }
+
+      const rows = (result.items || []).map(it => {
+        const icon = it.match ? '✅' : '❌';
+        const passes = it.why_pass.map(p => `<span style="color:#10b981">✓ ${escHtml(p)}</span>`).join('<br>');
+        const fails  = it.why_fail.map(p => `<span style="color:#f87171">✗ ${escHtml(p)}</span>`).join('<br>');
+        return `
+          <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-size:16px">${icon}</span>
+              <span style="font-size:13px;font-weight:600">${escHtml(it.title)}</span>
+              <span style="font-size:12px;color:var(--text-muted)">${it.price != null ? it.price + '€' : ''}</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">
+              brand=${escHtml(String(it.brand||'?'))} brand_id=${it.brand_id??'—'} category_id=${it.category_id??'—'}
+            </div>
+            <div style="font-size:12px;line-height:1.7">${passes}${fails ? (passes?'<br>':'') + fails : ''}</div>
+          </div>`;
+      }).join('');
+
+      const html = `
+        <div style="font-size:12px;background:var(--bg-1);border-radius:8px;padding:10px;margin-bottom:14px;font-family:monospace">
+          <div>Méthode : <b>${escHtml(result.fetch_method)}</b></div>
+          <div>Articles récupérés : <b>${result.total_fetched}</b> &nbsp;|&nbsp; Matchés : <b style="color:${result.matched>0?'#10b981':'#f87171'}">${result.matched}</b></div>
+        </div>
+        ${result.total_fetched === 0
+          ? `<p style="color:#f87171;font-size:13px">⚠ Vinted n'a renvoyé aucun article.<br>Causes possibles : IP bloquée (Cloudflare), cookies expirés, ou les IDs de marque/catégorie n'existent pas sur Vinted.</p>`
+          : `<div style="max-height:420px;overflow-y:auto">${rows}</div>`
+        }`;
+
+      modal.open(`🔍 Debug — ${escHtml(f.name)}`, html);
+    } catch(e) {
+      toast.show('Erreur debug : ' + e.message, 'error');
     }
   }
 

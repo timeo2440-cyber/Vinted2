@@ -1,7 +1,7 @@
 import json
 import asyncio
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db, Filter, SeenItem, User, AsyncSessionLocal
@@ -278,3 +278,133 @@ async def test_filter(
             matched.append(item_dict)
 
     return {"matched_count": len(matched), "items": matched[:50]}
+
+
+@router.get("/{filter_id}/debug")
+async def debug_filter(
+    filter_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Live debug: do a real targeted Vinted fetch with this filter's params,
+    then show exactly why each item passes or fails the filter.
+    """
+    import json as _json
+    from fastapi import Request as _Request
+    from vinted.catalog import fetch_newest_items, search_items
+
+    f = await db.get(Filter, filter_id)
+    if not f or f.user_id != user.id:
+        raise HTTPException(404, "Filtre introuvable")
+
+    def _parse(val):
+        if not val: return []
+        if isinstance(val, list): return val
+        try: return _json.loads(val)
+        except: return []
+
+    brand_ids   = _parse(f.brand_ids)
+    category_ids = _parse(f.category_ids)
+    size_ids    = _parse(f.size_ids)
+    keywords    = (f.keywords or "").strip()
+
+    client = request.app.state.vinted_client
+    items = []
+    fetch_method = "none"
+
+    if brand_ids or category_ids or size_ids:
+        fetch_method = f"targeted (brands={brand_ids}, cats={category_ids})"
+        try:
+            items = await fetch_newest_items(
+                client, per_page=20,
+                brand_ids=[int(b) for b in brand_ids] if brand_ids else None,
+                category_ids=[int(c) for c in category_ids] if category_ids else None,
+                size_ids=[int(s) for s in size_ids] if size_ids else None,
+            )
+            # Tag items (same as poller)
+            for item in items:
+                if brand_ids:
+                    item["_targeted_brand_ids"] = [int(b) for b in brand_ids]
+                if category_ids:
+                    item["_targeted_category_ids"] = [int(c) for c in category_ids]
+        except Exception as e:
+            return {"error": str(e), "fetch_method": fetch_method}
+    elif keywords:
+        fetch_method = f"keyword search: {keywords!r}"
+        try:
+            items = await search_items(client, query=keywords, per_page=20)
+        except Exception as e:
+            return {"error": str(e), "fetch_method": fetch_method}
+    else:
+        from vinted.catalog import fetch_newest_items as _fn
+        fetch_method = "generic (no criteria)"
+        try:
+            items = await _fn(client, per_page=20)
+        except Exception as e:
+            return {"error": str(e), "fetch_method": fetch_method}
+
+    # Analyse each item
+    results = []
+    for item in items[:15]:
+        why_pass = []
+        why_fail = []
+
+        # Brand
+        if brand_ids:
+            ibid = str(item.get("brand_id") or "")
+            tbids = [str(b) for b in (item.get("_targeted_brand_ids") or [])]
+            if ibid and ibid in [str(b) for b in brand_ids]:
+                why_pass.append(f"brand_id={ibid} ✓")
+            elif tbids:
+                why_pass.append(f"trusted brand (targeted fetch) ✓")
+            elif not ibid:
+                ibrand = (item.get("brand") or "").strip()
+                brand_names = _parse(f.brand_names)
+                if brand_names and ibrand:
+                    matched_text = any(bn.lower() in ibrand.lower() or ibrand.lower() in bn.lower() for bn in brand_names if bn)
+                    if matched_text:
+                        why_pass.append(f"brand text match: '{ibrand}' ✓")
+                    else:
+                        why_fail.append(f"brand text mismatch: item='{ibrand}', filter={brand_names}")
+                else:
+                    why_pass.append(f"brand skip (no brand_id, no text) ✓")
+            else:
+                why_fail.append(f"brand_id={ibid} not in filter {brand_ids}")
+
+        # Category
+        if category_ids:
+            icid = item.get("category_id")
+            tcids = [str(c) for c in (item.get("_targeted_category_ids") or [])]
+            if icid is not None and str(icid) in [str(c) for c in category_ids]:
+                why_pass.append(f"category_id={icid} ✓")
+            elif tcids:
+                why_pass.append(f"trusted category (targeted fetch) ✓")
+            elif icid is not None:
+                why_fail.append(f"category_id={icid} not in filter {category_ids}")
+            else:
+                why_pass.append(f"category skip (no category_id) ✓")
+
+        passed = _engine.match_item(item, f)
+        results.append({
+            "id": item.get("id"),
+            "title": item.get("title", "")[:60],
+            "brand": item.get("brand"),
+            "brand_id": item.get("brand_id"),
+            "category_id": item.get("category_id"),
+            "price": item.get("price"),
+            "match": passed,
+            "why_pass": why_pass,
+            "why_fail": why_fail,
+        })
+
+    matched_count = sum(1 for r in results if r["match"])
+    return {
+        "filter": {"name": f.name, "brand_ids": brand_ids, "category_ids": category_ids, "keywords": keywords},
+        "fetch_method": fetch_method,
+        "total_fetched": len(items),
+        "matched": matched_count,
+        "items": results,
+    }
+

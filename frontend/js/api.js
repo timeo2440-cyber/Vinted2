@@ -52,6 +52,7 @@ const api = (() => {
     replaceFilter: (id, data)   => request('PUT',    `/api/filters/${id}`, data),
     deleteFilter:  (id)         => request('DELETE', `/api/filters/${id}`),
     testFilter:    (id)         => request('POST',   `/api/filters/${id}/test`),
+    debugFilter:   (id)         => request('GET',    `/api/filters/${id}/debug`),
 
     // Settings
     getSettings:    ()     => request('GET', '/api/settings'),
