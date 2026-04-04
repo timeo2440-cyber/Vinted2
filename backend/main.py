@@ -15,6 +15,7 @@ from api import filters, settings, bot_control, history, stats, logs, vinted_met
 from api.auth import router as auth_router
 from api.admin import router as admin_router
 from api.backup import router as backup_router
+from api.payment import router as payment_router
 from config import settings as app_settings
 import os
 
@@ -123,6 +124,7 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(admin_router)
 app.include_router(backup_router)
+app.include_router(payment_router)
 app.include_router(filters.router)
 app.include_router(settings.router)
 app.include_router(bot_control.router)

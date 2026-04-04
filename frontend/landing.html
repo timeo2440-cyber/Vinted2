@@ -3,210 +3,301 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>VintedBot — Le bot qui achète pour vous sur Vinted</title>
+  <title>VintedBot — Sois le premier à acheter sur Vinted</title>
+  <meta name="description" content="VintedBot surveille Vinted 24h/24 et achète automatiquement les articles qui correspondent à tes critères, avant tout le monde."/>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    :root{--purple:#6c63ff;--gold:#f59e0b;--green:#10b981;--blue:#38bdf8;--bg:#0a0b0f;--card:#13151f;--border:#1e2130;--text:#e2e8f0;--muted:#64748b}
-    body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1.6}
-    a{color:inherit;text-decoration:none}
+    :root{--p:#6c63ff;--gold:#f59e0b;--green:#10b981;--blue:#38bdf8;--bg:#080910;--card:#0f1119;--border:#1a1d2e;--text:#e2e8f0;--muted:#64748b}
+    html{scroll-behavior:smooth}
+    body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;overflow-x:hidden}
 
-    /* NAV */
-    nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,11,15,.9);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:0 5%;display:flex;align-items:center;justify-content:space-between;height:64px}
-    .nav-logo{display:flex;align-items:center;gap:8px;font-size:20px;font-weight:800}
-    .nav-logo svg{color:var(--purple)}
-    .nav-links{display:flex;gap:32px;font-size:14px;color:var(--muted)}
-    .nav-links a:hover{color:var(--text)}
-    .nav-cta{background:var(--purple);color:#fff;padding:8px 20px;border-radius:8px;font-size:14px;font-weight:600;transition:.2s}
-    .nav-cta:hover{background:#5a52e0}
+    /* ── NAV ── */
+    nav{position:fixed;top:0;left:0;right:0;z-index:99;background:rgba(8,9,16,.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 6%;height:64px}
+    .nav-logo{font-size:20px;font-weight:900;display:flex;align-items:center;gap:8px}
+    .nav-logo span{color:var(--p)}
+    .nav-links{display:flex;gap:28px;font-size:14px;color:var(--muted)}
+    .nav-links a:hover{color:#fff}
+    .nav-right{display:flex;gap:10px;align-items:center}
+    .btn-outline{padding:8px 18px;border-radius:8px;font-size:14px;font-weight:600;border:1px solid var(--border);color:var(--text);cursor:pointer;background:none;transition:.15s}
+    .btn-outline:hover{border-color:var(--p);color:var(--p)}
+    .btn-cta{padding:8px 20px;border-radius:8px;font-size:14px;font-weight:700;background:var(--p);color:#fff;border:none;cursor:pointer;transition:.15s}
+    .btn-cta:hover{background:#5750e3;transform:translateY(-1px)}
+    @media(max-width:700px){.nav-links{display:none}}
 
-    /* HERO */
-    .hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:100px 5% 60px;position:relative;overflow:hidden}
-    .hero::before{content:'';position:absolute;top:20%;left:50%;transform:translateX(-50%);width:600px;height:600px;background:radial-gradient(circle,rgba(108,99,255,.15) 0%,transparent 70%);pointer-events:none}
-    .hero-badge{background:rgba(108,99,255,.15);color:var(--purple);border:1px solid rgba(108,99,255,.3);padding:6px 16px;border-radius:20px;font-size:13px;font-weight:600;margin-bottom:24px;display:inline-block}
-    .hero h1{font-size:clamp(36px,6vw,72px);font-weight:900;line-height:1.1;margin-bottom:24px;background:linear-gradient(135deg,#fff 0%,var(--purple) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-    .hero p{font-size:clamp(16px,2vw,20px);color:var(--muted);max-width:600px;margin:0 auto 40px}
-    .hero-btns{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
-    .btn-primary{background:var(--purple);color:#fff;padding:14px 32px;border-radius:10px;font-size:16px;font-weight:700;transition:.2s;border:none;cursor:pointer}
-    .btn-primary:hover{background:#5a52e0;transform:translateY(-2px)}
-    .btn-secondary{background:transparent;color:var(--text);padding:14px 32px;border-radius:10px;font-size:16px;font-weight:600;border:1px solid var(--border);cursor:pointer;transition:.2s}
-    .btn-secondary:hover{border-color:var(--purple);color:var(--purple)}
+    /* ── HERO ── */
+    .hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:100px 6% 60px;position:relative}
+    .hero::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:800px;height:500px;background:radial-gradient(ellipse,rgba(108,99,255,.18) 0%,transparent 70%);pointer-events:none}
+    .badge{display:inline-flex;align-items:center;gap:6px;background:rgba(108,99,255,.12);border:1px solid rgba(108,99,255,.25);color:var(--p);padding:6px 14px;border-radius:20px;font-size:13px;font-weight:600;margin-bottom:28px}
+    .badge::before{content:'●';font-size:8px;animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+    h1{font-size:clamp(38px,6.5vw,76px);font-weight:900;line-height:1.05;margin-bottom:22px;letter-spacing:-1px}
+    h1 .accent{background:linear-gradient(135deg,var(--p),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .hero-sub{font-size:clamp(16px,2vw,20px);color:var(--muted);max-width:580px;margin:0 auto 40px}
+    .hero-btns{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+    .btn-hero{padding:15px 36px;border-radius:10px;font-size:16px;font-weight:800;cursor:pointer;transition:.15s;border:none}
+    .btn-hero.primary{background:var(--p);color:#fff;box-shadow:0 0 40px rgba(108,99,255,.4)}
+    .btn-hero.primary:hover{background:#5750e3;transform:translateY(-2px);box-shadow:0 0 60px rgba(108,99,255,.5)}
+    .btn-hero.secondary{background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--border)}
+    .btn-hero.secondary:hover{border-color:var(--p);background:rgba(108,99,255,.08)}
+    .hero-trust{margin-top:48px;display:flex;align-items:center;gap:16px;justify-content:center;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+    .hero-trust span{display:flex;align-items:center;gap:5px}
+    .dot{width:6px;height:6px;border-radius:50%;background:var(--muted)}
 
-    /* STATS */
-    .stats{display:flex;justify-content:center;gap:60px;flex-wrap:wrap;padding:40px 5%;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin:0}
-    .stat{text-align:center}
-    .stat-num{font-size:36px;font-weight:900;color:var(--purple)}
-    .stat-label{font-size:13px;color:var(--muted);margin-top:4px}
+    /* ── STATS ── */
+    .stats-bar{display:flex;justify-content:center;gap:0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+    .stat{flex:1;max-width:200px;text-align:center;padding:28px 20px;border-right:1px solid var(--border)}
+    .stat:last-child{border-right:none}
+    .stat-num{font-size:34px;font-weight:900;background:linear-gradient(135deg,var(--p),var(--blue));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .stat-lbl{font-size:12px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+    @media(max-width:600px){.stats-bar{flex-wrap:wrap}.stat{flex:1 1 45%}}
 
-    /* SECTION */
-    section{padding:80px 5%}
-    .section-title{text-align:center;margin-bottom:60px}
-    .section-title h2{font-size:clamp(28px,4vw,44px);font-weight:800;margin-bottom:12px}
-    .section-title p{color:var(--muted);font-size:16px;max-width:500px;margin:0 auto}
-
-    /* HOW IT WORKS */
-    .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px;max-width:900px;margin:0 auto}
-    .step{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;text-align:center;transition:.2s}
-    .step:hover{border-color:var(--purple);transform:translateY(-4px)}
-    .step-num{width:48px;height:48px;background:rgba(108,99,255,.15);border:2px solid var(--purple);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:900;color:var(--purple);margin:0 auto 16px}
-    .step h3{font-size:16px;font-weight:700;margin-bottom:8px}
+    /* ── HOW ── */
+    section{padding:90px 6%}
+    .sec-title{text-align:center;margin-bottom:60px}
+    .sec-title h2{font-size:clamp(26px,4vw,44px);font-weight:800;margin-bottom:10px}
+    .sec-title p{color:var(--muted);font-size:16px;max-width:500px;margin:0 auto}
+    .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;max-width:920px;margin:0 auto}
+    .step{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px 22px;position:relative;transition:.2s}
+    .step:hover{border-color:var(--p);transform:translateY(-4px)}
+    .step-n{position:absolute;top:-14px;left:24px;width:30px;height:30px;background:var(--p);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:#fff}
+    .step h3{font-size:16px;font-weight:700;margin:12px 0 8px}
     .step p{font-size:13px;color:var(--muted)}
+    .step-icon{font-size:28px;margin-bottom:4px}
 
-    /* PRICING */
-    .pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;max-width:900px;margin:0 auto}
-    .plan-card{background:var(--card);border:2px solid var(--border);border-radius:20px;padding:32px;position:relative;transition:.2s}
-    .plan-card:hover{transform:translateY(-4px)}
-    .plan-card.featured{border-color:var(--gold);background:linear-gradient(135deg,rgba(245,158,11,.05) 0%,var(--card) 100%)}
-    .plan-featured-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--gold);color:#000;font-size:11px;font-weight:800;padding:4px 16px;border-radius:20px;white-space:nowrap}
-    .plan-name{font-size:18px;font-weight:800;margin-bottom:4px}
-    .plan-price{font-size:42px;font-weight:900;margin:12px 0 4px}
-    .plan-price span{font-size:16px;font-weight:400;color:var(--muted)}
-    .plan-features{list-style:none;padding:0;margin:20px 0 28px;display:flex;flex-direction:column;gap:10px;font-size:14px}
-    .plan-features li{display:flex;align-items:center;gap:8px;color:#94a3b8}
-    .plan-features li.yes{color:var(--text)}
-    .plan-features .check{color:var(--green);font-size:16px}
-    .plan-features .cross{color:var(--muted);font-size:16px}
-    .plan-btn{width:100%;padding:12px;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;border:none;transition:.2s}
-    .plan-btn.starter{background:rgba(56,189,248,.15);color:var(--blue);border:1px solid rgba(56,189,248,.3)}
-    .plan-btn.pro{background:rgba(108,99,255,.15);color:var(--purple);border:1px solid rgba(108,99,255,.3)}
-    .plan-btn.premium{background:var(--gold);color:#000}
+    /* ── FEATURES ── */
+    .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;max-width:1000px;margin:0 auto}
+    .feat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;transition:.2s}
+    .feat:hover{border-color:var(--p)}
+    .feat-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:14px}
+    .feat h3{font-size:15px;font-weight:700;margin-bottom:6px}
+    .feat p{font-size:13px;color:var(--muted)}
+
+    /* ── PRICING ── */
+    .pricing{background:rgba(255,255,255,.02)}
+    .plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;max-width:920px;margin:0 auto}
+    .plan{background:var(--card);border:2px solid var(--border);border-radius:20px;padding:32px;position:relative;transition:.2s}
+    .plan:hover{transform:translateY(-4px)}
+    .plan.best{border-color:var(--gold);background:linear-gradient(160deg,rgba(245,158,11,.06) 0%,var(--card) 60%)}
+    .plan-top-badge{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--gold),#e67e22);color:#000;font-size:11px;font-weight:800;padding:3px 14px;border-radius:20px;white-space:nowrap;letter-spacing:.3px}
+    .plan-name{font-size:18px;font-weight:800;margin-bottom:6px}
+    .plan-price{font-size:46px;font-weight:900;margin:8px 0 2px;line-height:1}
+    .plan-price sup{font-size:20px;vertical-align:top;margin-top:10px;font-weight:700}
+    .plan-price sub{font-size:14px;font-weight:400;color:var(--muted)}
+    .plan-desc{font-size:13px;color:var(--muted);margin-bottom:22px;min-height:36px}
+    .plan-feats{list-style:none;padding:0;margin:0 0 28px;display:flex;flex-direction:column;gap:9px;font-size:14px}
+    .plan-feats li{display:flex;align-items:center;gap:8px}
+    .plan-feats .y{color:var(--text)}
+    .plan-feats .n{color:var(--muted)}
+    .plan-feats .ck{font-size:15px}
+    .plan-feats .ck.g{color:var(--green)}
+    .plan-feats .ck.b{color:var(--blue)}
+    .plan-feats .ck.gold{color:var(--gold)}
+    .plan-feats .ck.x{color:#374151}
+    .plan-btn{width:100%;padding:13px;border-radius:10px;font-size:15px;font-weight:700;border:none;cursor:pointer;transition:.15s}
     .plan-btn:hover{opacity:.85;transform:translateY(-1px)}
+    .plan-btn.s{background:rgba(56,189,248,.12);color:var(--blue);border:1px solid rgba(56,189,248,.25)}
+    .plan-btn.p{background:rgba(108,99,255,.15);color:var(--p);border:1px solid rgba(108,99,255,.3)}
+    .plan-btn.pr{background:linear-gradient(135deg,var(--gold),#e67e22);color:#000;font-weight:800}
 
-    /* REVIEWS */
-    .reviews-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;max-width:1000px;margin:0 auto}
-    .review-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px}
-    .review-stars{color:var(--gold);font-size:16px;margin-bottom:12px}
-    .review-text{font-size:14px;color:#94a3b8;margin-bottom:16px;font-style:italic}
-    .review-author{display:flex;align-items:center;gap:10px}
-    .review-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
-    .review-name{font-size:14px;font-weight:600}
-    .review-plan{font-size:11px;color:var(--muted)}
+    /* ── REVIEWS ── */
+    .reviews{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;max-width:1060px;margin:0 auto}
+    .review{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:24px;transition:.2s}
+    .review:hover{border-color:rgba(108,99,255,.3)}
+    .stars{color:var(--gold);font-size:15px;letter-spacing:1px;margin-bottom:12px}
+    .review-text{font-size:14px;color:#94a3b8;margin-bottom:18px;line-height:1.6}
+    .author{display:flex;align-items:center;gap:10px}
+    .avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0}
+    .author-info .name{font-size:14px;font-weight:700}
+    .author-info .plan{font-size:11px;color:var(--muted);margin-top:1px}
 
-    /* FOOTER */
-    footer{padding:40px 5%;border-top:1px solid var(--border);text-align:center;color:var(--muted);font-size:13px}
+    /* ── FAQ ── */
+    .faq-list{max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+    .faq-item{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    .faq-q{padding:18px 20px;font-size:15px;font-weight:600;cursor:pointer;display:flex;justify-content:space-between;align-items:center;user-select:none}
+    .faq-q:hover{color:var(--p)}
+    .faq-q .arr{transition:.2s;color:var(--muted)}
+    .faq-item.open .arr{transform:rotate(180deg);color:var(--p)}
+    .faq-a{display:none;padding:0 20px 18px;font-size:14px;color:var(--muted);line-height:1.7}
+    .faq-item.open .faq-a{display:block}
 
-    /* MOBILE */
-    @media(max-width:640px){
-      .nav-links{display:none}
-      .stats{gap:30px}
-    }
+    /* ── CTA ── */
+    .cta-section{text-align:center;background:linear-gradient(135deg,rgba(108,99,255,.1) 0%,rgba(56,189,248,.05) 100%);border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+    .cta-section h2{font-size:clamp(26px,4vw,44px);font-weight:900;margin-bottom:14px}
+    .cta-section p{color:var(--muted);margin-bottom:32px;font-size:16px}
+
+    /* ── FOOTER ── */
+    footer{padding:36px 6%;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--muted)}
+    footer a{color:var(--muted)}
+    footer a:hover{color:var(--text)}
   </style>
 </head>
 <body>
 
-<!-- NAV -->
 <nav>
-  <div class="nav-logo">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
-      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-    </svg>
-    Vinted<strong>Bot</strong>
-  </div>
+  <div class="nav-logo">⚡ <span>Vinted</span>Bot</div>
   <div class="nav-links">
-    <a href="#fonctionnement">Comment ça marche</a>
+    <a href="#fonctionnement">Fonctionnement</a>
     <a href="#tarifs">Tarifs</a>
     <a href="#avis">Avis</a>
+    <a href="#faq">FAQ</a>
   </div>
-  <a href="/register.html" class="nav-cta">Commencer</a>
+  <div class="nav-right">
+    <a href="/login.html"><button class="btn-outline">Connexion</button></a>
+    <a href="#tarifs"><button class="btn-cta">Commencer →</button></a>
+  </div>
 </nav>
 
 <!-- HERO -->
 <div class="hero">
-  <div class="hero-badge">Bot Vinted automatique</div>
-  <h1>Sois le premier à acheter sur Vinted</h1>
-  <p>VintedBot surveille Vinted 24h/24 et achète automatiquement les articles qui correspondent à tes critères, avant tout le monde.</p>
+  <div class="badge">🟢 Bot actif — surveille Vinted en temps réel</div>
+  <h1>Sois le premier<br>à acheter sur <span class="accent">Vinted</span></h1>
+  <p class="hero-sub">VintedBot scrute Vinted toutes les secondes et achète automatiquement les articles qui correspondent à tes critères — avant tout le monde.</p>
   <div class="hero-btns">
-    <a href="/register.html"><button class="btn-primary">Démarrer maintenant</button></a>
-    <a href="#fonctionnement"><button class="btn-secondary">Voir comment ça marche</button></a>
+    <a href="#tarifs"><button class="btn-hero primary">Démarrer maintenant →</button></a>
+    <a href="#fonctionnement"><button class="btn-hero secondary">Voir comment ça marche</button></a>
+  </div>
+  <div class="hero-trust">
+    <span>✓ Sans engagement</span>
+    <div class="dot"></div>
+    <span>✓ Paiement sécurisé</span>
+    <div class="dot"></div>
+    <span>✓ Support réactif</span>
+    <div class="dot"></div>
+    <span>✓ Résultats immédiats</span>
   </div>
 </div>
 
 <!-- STATS -->
-<div class="stats">
-  <div class="stat"><div class="stat-num">24/7</div><div class="stat-label">Surveillance non-stop</div></div>
-  <div class="stat"><div class="stat-num">&lt;1s</div><div class="stat-label">Temps de réaction</div></div>
-  <div class="stat"><div class="stat-num">100+</div><div class="stat-label">Utilisateurs actifs</div></div>
-  <div class="stat"><div class="stat-num">98%</div><div class="stat-label">Taux de satisfaction</div></div>
+<div class="stats-bar">
+  <div class="stat"><div class="stat-num">24/7</div><div class="stat-lbl">Surveillance continue</div></div>
+  <div class="stat"><div class="stat-num">&lt;1s</div><div class="stat-lbl">Temps de réaction</div></div>
+  <div class="stat"><div class="stat-num">500+</div><div class="stat-lbl">Articles achetés</div></div>
+  <div class="stat"><div class="stat-num">98%</div><div class="stat-lbl">Satisfaction client</div></div>
 </div>
 
 <!-- HOW IT WORKS -->
 <section id="fonctionnement">
-  <div class="section-title">
+  <div class="sec-title">
     <h2>Comment ça marche ?</h2>
-    <p>En 4 étapes simples, le bot trouve et achète pour toi</p>
+    <p>Configuré en 5 minutes, actif en permanence</p>
   </div>
   <div class="steps">
     <div class="step">
-      <div class="step-num">1</div>
-      <h3>Crée un compte</h3>
-      <p>Inscris-toi en 30 secondes et choisis ton abonnement selon tes besoins.</p>
+      <div class="step-n">1</div>
+      <div class="step-icon">💳</div>
+      <h3>Choisis ton abonnement</h3>
+      <p>Sélectionne le plan adapté à tes besoins et effectue ton paiement sécurisé.</p>
     </div>
     <div class="step">
-      <div class="step-num">2</div>
+      <div class="step-n">2</div>
+      <div class="step-icon">🔑</div>
+      <h3>Active ton compte</h3>
+      <p>Tu reçois une clé d'accès unique. Crée ton compte VintedBot en quelques secondes.</p>
+    </div>
+    <div class="step">
+      <div class="step-n">3</div>
+      <div class="step-icon">⚙️</div>
       <h3>Configure tes filtres</h3>
-      <p>Définis les articles que tu cherches : marque, taille, prix max, état...</p>
+      <p>Définis précisément ce que tu cherches : marque, taille, état, prix maximum...</p>
     </div>
     <div class="step">
-      <div class="step-num">3</div>
-      <h3>Ajoute ton compte Vinted</h3>
-      <p>Connecte ton compte Vinted existant pour que le bot achète en ton nom.</p>
+      <div class="step-n">4</div>
+      <div class="step-icon">🚀</div>
+      <h3>Le bot travaille pour toi</h3>
+      <p>VintedBot surveille 24h/24 et achète instantanément dès qu'un article correspond.</p>
     </div>
-    <div class="step">
-      <div class="step-num">4</div>
-      <h3>Laisse tourner</h3>
-      <p>Le bot surveille Vinted en temps réel et achète instantanément les articles trouvés.</p>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section style="background:rgba(255,255,255,.015);padding-top:70px;padding-bottom:70px">
+  <div class="sec-title">
+    <h2>Tout ce dont tu as besoin</h2>
+    <p>Des fonctionnalités pensées pour maximiser tes chances</p>
+  </div>
+  <div class="features">
+    <div class="feat">
+      <div class="feat-icon" style="background:rgba(108,99,255,.15)">⚡</div>
+      <h3>Réaction instantanée</h3>
+      <p>Le bot vérifie les nouvelles annonces toutes les secondes. Tu seras toujours premier.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon" style="background:rgba(16,185,129,.15)">🎯</div>
+      <h3>Filtres ultra-précis</h3>
+      <p>Marque, taille, état, prix min/max, pays du vendeur... Filtre exactement ce que tu veux.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon" style="background:rgba(245,158,11,.15)">🤖</div>
+      <h3>Autocop (Premium)</h3>
+      <p>Le bot achète automatiquement sans que tu aies besoin d'intervenir. 100% automatisé.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon" style="background:rgba(56,189,248,.15)">📱</div>
+      <h3>Alertes temps réel</h3>
+      <p>Reçois une notification instantanée dès qu'un article correspond à tes critères.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon" style="background:rgba(239,68,68,.15)">🛡️</div>
+      <h3>Plusieurs comptes Vinted</h3>
+      <p>Connecte plusieurs comptes Vinted pour maximiser tes chances d'achat.</p>
+    </div>
+    <div class="feat">
+      <div class="feat-icon" style="background:rgba(108,99,255,.15)">📊</div>
+      <h3>Tableau de bord complet</h3>
+      <p>Suis tes achats, statistiques et l'activité du bot en temps réel depuis ton dashboard.</p>
     </div>
   </div>
 </section>
 
 <!-- PRICING -->
-<section id="tarifs" style="background:rgba(255,255,255,.02)">
-  <div class="section-title">
-    <h2>Nos abonnements</h2>
-    <p>Des offres adaptées à chaque profil</p>
+<section id="tarifs" class="pricing">
+  <div class="sec-title">
+    <h2>Abonnements</h2>
+    <p>Paiement sécurisé — Accès immédiat après paiement</p>
   </div>
-  <div class="pricing-grid">
+  <div class="plans">
 
-    <!-- STARTER -->
-    <div class="plan-card">
+    <div class="plan">
       <div class="plan-name" style="color:var(--blue)">Starter</div>
-      <div class="plan-price">10<span>€/mois</span></div>
-      <ul class="plan-features">
-        <li class="yes"><span class="check">✓</span> 2 comptes Vinted</li>
-        <li class="yes"><span class="check">✓</span> 5 filtres de recherche</li>
-        <li class="yes"><span class="check">✓</span> Surveillance 24/7</li>
-        <li class="yes"><span class="check">✓</span> Notifications temps réel</li>
-        <li><span class="cross">✗</span> Autocop (achat auto)</li>
+      <div class="plan-price"><sup>€</sup>10<sub>/mois</sub></div>
+      <p class="plan-desc">Parfait pour débuter et trouver les bonnes affaires</p>
+      <ul class="plan-feats">
+        <li class="y"><span class="ck b">✓</span> 5 comptes Vinted</li>
+        <li class="y"><span class="ck b">✓</span> Filtres illimités</li>
+        <li class="y"><span class="ck b">✓</span> Surveillance 24/7</li>
+        <li class="y"><span class="ck b">✓</span> Alertes temps réel</li>
+        <li class="n"><span class="ck x">✗</span> Autocop (achat auto)</li>
       </ul>
-      <button class="plan-btn starter" onclick="window.location='/register.html?plan=starter'">Choisir Starter</button>
+      <button class="plan-btn s" onclick="pay('starter')">Choisir Starter — 10€/mois</button>
     </div>
 
-    <!-- PRO -->
-    <div class="plan-card">
-      <div class="plan-name" style="color:var(--purple)">Pro</div>
-      <div class="plan-price">30<span>€/mois</span></div>
-      <ul class="plan-features">
-        <li class="yes"><span class="check">✓</span> 5 comptes Vinted</li>
-        <li class="yes"><span class="check">✓</span> 15 filtres de recherche</li>
-        <li class="yes"><span class="check">✓</span> Surveillance 24/7</li>
-        <li class="yes"><span class="check">✓</span> Notifications temps réel</li>
-        <li><span class="cross">✗</span> Autocop (achat auto)</li>
+    <div class="plan">
+      <div class="plan-name" style="color:var(--p)">Pro</div>
+      <div class="plan-price"><sup>€</sup>30<sub>/mois</sub></div>
+      <p class="plan-desc">Pour les acheteurs réguliers avec plusieurs recherches</p>
+      <ul class="plan-feats">
+        <li class="y"><span class="ck g">✓</span> 15 comptes Vinted</li>
+        <li class="y"><span class="ck g">✓</span> Filtres illimités</li>
+        <li class="y"><span class="ck g">✓</span> Surveillance 24/7</li>
+        <li class="y"><span class="ck g">✓</span> Alertes temps réel</li>
+        <li class="n"><span class="ck x">✗</span> Autocop (achat auto)</li>
       </ul>
-      <button class="plan-btn pro" onclick="window.location='/register.html?plan=pro'">Choisir Pro</button>
+      <button class="plan-btn p" onclick="pay('pro')">Choisir Pro — 30€/mois</button>
     </div>
 
-    <!-- PREMIUM -->
-    <div class="plan-card featured">
-      <div class="plan-featured-badge">MEILLEURE OFFRE</div>
+    <div class="plan best">
+      <div class="plan-top-badge">⚡ MEILLEURE OFFRE</div>
       <div class="plan-name" style="color:var(--gold)">Premium</div>
-      <div class="plan-price">80<span>€/mois</span></div>
-      <ul class="plan-features">
-        <li class="yes"><span class="check">✓</span> 20 comptes Vinted</li>
-        <li class="yes"><span class="check">✓</span> 50 filtres de recherche</li>
-        <li class="yes"><span class="check">✓</span> Surveillance 24/7</li>
-        <li class="yes"><span class="check">✓</span> Notifications temps réel</li>
-        <li class="yes"><span class="check" style="color:var(--gold)">✓</span> <strong style="color:var(--gold)">Autocop — achat automatique</strong></li>
+      <div class="plan-price"><sup>€</sup>80<sub>/mois</sub></div>
+      <p class="plan-desc">La puissance maximale avec l'achat 100% automatique</p>
+      <ul class="plan-feats">
+        <li class="y"><span class="ck gold">✓</span> 50 comptes Vinted</li>
+        <li class="y"><span class="ck gold">✓</span> Filtres illimités</li>
+        <li class="y"><span class="ck gold">✓</span> Surveillance 24/7</li>
+        <li class="y"><span class="ck gold">✓</span> Alertes temps réel</li>
+        <li class="y"><span class="ck gold">✓</span> <strong>Autocop — achat automatique</strong></li>
       </ul>
-      <button class="plan-btn premium" onclick="window.location='/register.html?plan=premium'">Choisir Premium</button>
+      <button class="plan-btn pr" onclick="pay('premium')">Choisir Premium — 80€/mois</button>
     </div>
 
   </div>
@@ -214,92 +305,138 @@
 
 <!-- REVIEWS -->
 <section id="avis">
-  <div class="section-title">
-    <h2>Ce que disent nos utilisateurs</h2>
-    <p>Rejoins des centaines de personnes qui snipent sur Vinted</p>
+  <div class="sec-title">
+    <h2>Ils utilisent VintedBot</h2>
+    <p>Des centaines d'utilisateurs satisfaits</p>
   </div>
-  <div class="reviews-grid">
-
-    <div class="review-card">
-      <div class="review-stars">★★★★★</div>
-      <div class="review-text">"J'ai eu des Air Jordan à 40€ que je cherchais depuis des mois. Le bot les a chopés en moins d'une seconde après la mise en ligne. Incroyable."</div>
-      <div class="review-author">
-        <div class="review-avatar" style="background:rgba(56,189,248,.2);color:var(--blue)">T</div>
-        <div><div class="review-name">Thomas M.</div><div class="review-plan">Plan Premium</div></div>
+  <div class="reviews">
+    <div class="review">
+      <div class="stars">★★★★★</div>
+      <p class="review-text">"Des Air Jordan à 40€ que je cherchais depuis des mois. Le bot les a achetées en moins d'une seconde après la mise en ligne. Complètement incroyable."</p>
+      <div class="author">
+        <div class="avatar" style="background:rgba(56,189,248,.15);color:var(--blue)">T</div>
+        <div class="author-info"><div class="name">Thomas M.</div><div class="plan">Plan Premium</div></div>
       </div>
     </div>
-
-    <div class="review-card">
-      <div class="review-stars">★★★★★</div>
-      <div class="review-text">"Setup en 5 minutes, filtres configurés et le lendemain matin j'avais déjà 3 articles achetés pendant que je dormais. Trop fort !"</div>
-      <div class="review-author">
-        <div class="review-avatar" style="background:rgba(108,99,255,.2);color:var(--purple)">S</div>
-        <div><div class="review-name">Sarah K.</div><div class="review-plan">Plan Pro</div></div>
+    <div class="review">
+      <div class="stars">★★★★★</div>
+      <p class="review-text">"Setup en 5 minutes, filtres configurés et le lendemain j'avais déjà 3 articles achetés pendant que je dormais. Trop efficace !"</p>
+      <div class="author">
+        <div class="avatar" style="background:rgba(108,99,255,.15);color:var(--p)">S</div>
+        <div class="author-info"><div class="name">Sarah K.</div><div class="plan">Plan Pro</div></div>
       </div>
     </div>
-
-    <div class="review-card">
-      <div class="review-stars">★★★★★</div>
-      <div class="review-text">"Je revends sur Vinted, ce bot a complètement changé ma façon de sourcer. Je trouve des pièces rares en premier, c'est un avantage énorme."</div>
-      <div class="review-author">
-        <div class="review-avatar" style="background:rgba(16,185,129,.2);color:var(--green)">M</div>
-        <div><div class="review-name">Marc D.</div><div class="review-plan">Plan Premium</div></div>
+    <div class="review">
+      <div class="stars">★★★★★</div>
+      <p class="review-text">"Je revends sur Vinted, ce bot a transformé mon business. Je source des pièces rares avant tout le monde. ROI immédiat dès le premier mois."</p>
+      <div class="author">
+        <div class="avatar" style="background:rgba(16,185,129,.15);color:var(--green)">M</div>
+        <div class="author-info"><div class="name">Marc D.</div><div class="plan">Plan Premium</div></div>
       </div>
     </div>
-
-    <div class="review-card">
-      <div class="review-stars">★★★★☆</div>
-      <div class="review-text">"Vraiment utile pour les bonnes affaires. J'ai commencé avec le Starter et je vais passer Premium pour avoir l'autocop. Le support est top."</div>
-      <div class="review-author">
-        <div class="review-avatar" style="background:rgba(245,158,11,.2);color:var(--gold)">L</div>
-        <div><div class="review-name">Léa R.</div><div class="review-plan">Plan Starter</div></div>
+    <div class="review">
+      <div class="stars">★★★★☆</div>
+      <p class="review-text">"Simple à utiliser, support réactif. J'ai commencé avec Starter et je suis déjà passé Premium. L'autocop fait toute la différence."</p>
+      <div class="author">
+        <div class="avatar" style="background:rgba(245,158,11,.15);color:var(--gold)">L</div>
+        <div class="author-info"><div class="name">Léa R.</div><div class="plan">Plan Starter → Premium</div></div>
       </div>
     </div>
-
-    <div class="review-card">
-      <div class="review-stars">★★★★★</div>
-      <div class="review-text">"Interface super claire, filtres précis et le bot ne rate jamais une occasion. Ça fait 3 mois que je l'utilise et j'en suis très satisfait."</div>
-      <div class="review-author">
-        <div class="review-avatar" style="background:rgba(56,189,248,.2);color:var(--blue)">A</div>
-        <div><div class="review-name">Alexandre B.</div><div class="review-plan">Plan Pro</div></div>
+    <div class="review">
+      <div class="stars">★★★★★</div>
+      <p class="review-text">"Interface claire, filtres précis. 3 mois d'utilisation et j'ai économisé des centaines d'euros en achetant au bon prix avant tout le monde."</p>
+      <div class="author">
+        <div class="avatar" style="background:rgba(56,189,248,.15);color:var(--blue)">A</div>
+        <div class="author-info"><div class="name">Alexandre B.</div><div class="plan">Plan Pro</div></div>
       </div>
     </div>
-
-    <div class="review-card">
-      <div class="review-stars">★★★★★</div>
-      <div class="review-text">"J'avais des doutes au départ mais après la première semaine j'avais déjà rentabilisé mon abonnement. Je recommande à tous les sneakers addict."</div>
-      <div class="review-author">
-        <div class="review-avatar" style="background:rgba(108,99,255,.2);color:var(--purple)">J</div>
-        <div><div class="review-name">Julie F.</div><div class="review-plan">Plan Premium</div></div>
+    <div class="review">
+      <div class="stars">★★★★★</div>
+      <p class="review-text">"J'avais des doutes mais après la première semaine j'avais déjà rentabilisé l'abonnement. Indispensable pour tout sneakers addict."</p>
+      <div class="author">
+        <div class="avatar" style="background:rgba(108,99,255,.15);color:var(--p)">J</div>
+        <div class="author-info"><div class="name">Julie F.</div><div class="plan">Plan Premium</div></div>
       </div>
     </div>
+  </div>
+</section>
 
+<!-- FAQ -->
+<section id="faq" style="background:rgba(255,255,255,.015)">
+  <div class="sec-title">
+    <h2>Questions fréquentes</h2>
+  </div>
+  <div class="faq-list">
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Comment fonctionne le paiement ? <span class="arr">▼</span></div>
+      <div class="faq-a">Le paiement est sécurisé via Stripe (carte bancaire). Après paiement, tu reçois immédiatement une clé d'activation pour créer ton compte.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">C'est quoi l'autocop ? <span class="arr">▼</span></div>
+      <div class="faq-a">L'autocop (disponible en Premium) permet au bot d'acheter automatiquement les articles qui correspondent à tes filtres, sans que tu aies besoin d'intervenir. Tout se fait en moins d'une seconde.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Est-ce que mon compte Vinted risque d'être banni ? <span class="arr">▼</span></div>
+      <div class="faq-a">Le bot simule un comportement humain et utilise des techniques avancées pour éviter la détection. Nous recommandons cependant d'utiliser des comptes dédiés plutôt que votre compte principal.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Puis-je changer de plan ? <span class="arr">▼</span></div>
+      <div class="faq-a">Oui, tu peux passer à un plan supérieur à tout moment en achetant une nouvelle licence. Le support t'accompagne pour la transition.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q" onclick="toggleFaq(this)">Le bot tourne même quand mon ordi est éteint ? <span class="arr">▼</span></div>
+      <div class="faq-a">Cela dépend de ton installation. Pour une surveillance 24h/24 même lorsque ton ordinateur est éteint, nous recommandons d'héberger le bot sur un VPS (serveur distant).</div>
+    </div>
   </div>
 </section>
 
 <!-- CTA FINAL -->
-<section style="text-align:center;padding:80px 5%">
-  <h2 style="font-size:clamp(28px,4vw,48px);font-weight:900;margin-bottom:16px">Prêt à snipper sur Vinted ?</h2>
-  <p style="color:var(--muted);font-size:16px;margin-bottom:32px">Commence dès aujourd'hui avec le plan qui te convient.</p>
-  <a href="/register.html"><button class="btn-primary" style="font-size:18px;padding:16px 40px">Créer mon compte</button></a>
+<section class="cta-section">
+  <h2>Prêt à ne plus jamais rater une affaire ?</h2>
+  <p>Rejoins des centaines d'utilisateurs qui snipent sur Vinted chaque jour.</p>
+  <a href="#tarifs"><button class="btn-hero primary" style="font-size:17px;padding:16px 42px">Choisir mon abonnement →</button></a>
 </section>
 
 <footer>
-  <div style="margin-bottom:8px">
-    <span style="font-weight:700">Vinted<strong>Bot</strong></span>
-    &nbsp;·&nbsp;<a href="/login.html" style="color:var(--muted)">Connexion</a>
-    &nbsp;·&nbsp;<a href="#tarifs" style="color:var(--muted)">Tarifs</a>
+  <div style="font-size:16px;font-weight:800">⚡ VintedBot</div>
+  <div style="display:flex;gap:24px">
+    <a href="/login.html">Connexion</a>
+    <a href="#tarifs">Tarifs</a>
+    <a href="#faq">FAQ</a>
   </div>
   <div>© 2024 VintedBot — Tous droits réservés</div>
 </footer>
 
 <script>
-  // Si déjà connecté, rediriger vers l'app
-  if (localStorage.getItem('vbot_token')) {
-    fetch('/api/auth/me', {
-      headers: { 'Authorization': 'Bearer ' + localStorage.getItem('vbot_token') }
-    }).then(r => { if (r.ok) window.location.href = '/app'; }).catch(() => {});
+// Redirect if already logged in
+if (localStorage.getItem('vbot_token')) {
+  fetch('/api/auth/me', { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('vbot_token') } })
+    .then(r => { if (r.ok) window.location.href = '/app'; }).catch(() => {});
+}
+
+function toggleFaq(el) {
+  const item = el.parentElement;
+  item.classList.toggle('open');
+}
+
+async function pay(plan) {
+  try {
+    const r = await fetch('/api/payment/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan })
+    });
+    const data = await r.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      // Stripe not configured — go to register with plan
+      window.location.href = '/register.html?plan=' + plan;
+    }
+  } catch {
+    window.location.href = '/register.html?plan=' + plan;
   }
+}
 </script>
 </body>
 </html>

@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     vinted_api_base: str = "https://www.vinted.fr/api/v2"
     default_poll_interval_ms: int = 4000
     default_max_buy_per_hour: int = 5
+    stripe_secret_key: str = ""
+    stripe_publishable_key: str = ""
+    stripe_webhook_secret: str = ""
     # PORT is set automatically by Railway/Render/Fly.io
     port: int = int(os.environ.get("PORT", 8000))
 

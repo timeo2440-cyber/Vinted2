@@ -20,9 +20,9 @@ class Base(DeclarativeBase):
 
 # ── Plans & limits ────────────────────────────────────────────────────────────
 PLAN_LIMITS = {
-    "starter":   {"max_accounts": 2,   "max_filters": 5,   "auto_buy": False, "price": 10,  "label": "Starter"},
-    "pro":       {"max_accounts": 5,   "max_filters": 15,  "auto_buy": False, "price": 30,  "label": "Pro"},
-    "premium":   {"max_accounts": 20,  "max_filters": 50,  "auto_buy": True,  "price": 80,  "label": "Premium"},
+    "starter":   {"max_accounts": 5,   "max_filters": 999, "auto_buy": False, "price": 10,  "label": "Starter"},
+    "pro":       {"max_accounts": 15,  "max_filters": 999, "auto_buy": False, "price": 30,  "label": "Pro"},
+    "premium":   {"max_accounts": 50,  "max_filters": 999, "auto_buy": True,  "price": 80,  "label": "Premium"},
     # Plans internes (admin/gratuit)
     "free":      {"max_accounts": 1,   "max_filters": 2,   "auto_buy": False, "price": 0,   "label": "Gratuit"},
     "unlimited": {"max_accounts": 999, "max_filters": 999, "auto_buy": True,  "price": 0,   "label": "Unlimited"},

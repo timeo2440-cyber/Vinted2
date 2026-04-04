@@ -26,6 +26,7 @@ def _verify_password(password: str, hashed: str) -> bool:
 class RegisterBody(BaseModel):
     email: str
     password: str
+    license_key: str = ""    # Obligatoire sauf pour le 1er utilisateur (admin)
 
 
 class LoginBody(BaseModel):
@@ -56,7 +57,8 @@ def _serialize_user(u: User) -> dict:
 async def register(body: RegisterBody):
     """
     Register a new user.
-    The very first user registered automatically becomes admin with unlimited plan.
+    - 1er utilisateur → admin + unlimited (pas de clé requise)
+    - Autres → clé de licence obligatoire
     """
     if not body.email or not body.password:
         raise HTTPException(400, "Email et mot de passe requis")
@@ -69,17 +71,39 @@ async def register(body: RegisterBody):
         if existing.scalar_one_or_none():
             raise HTTPException(400, "Cet email est déjà utilisé")
 
-        # First user gets admin + unlimited plan
+        # First user gets admin + unlimited plan (no key needed)
         count_result = await db.execute(select(User))
         is_first = not count_result.scalars().first()
+
+        plan = "unlimited" if is_first else "free"
+        role = "admin" if is_first else "user"
+
+        # Non-admin users need a valid license key
+        if not is_first:
+            if not body.license_key:
+                raise HTTPException(400, "Une clé d'activation est requise pour créer un compte. Choisis un abonnement sur la page d'accueil.")
+            lic = await db.get(LicenseKey, body.license_key.strip())
+            if not lic:
+                raise HTTPException(400, "Clé d'activation invalide ou introuvable.")
+            if lic.used_by_user_id:
+                raise HTTPException(400, "Cette clé a déjà été utilisée.")
+            plan = lic.plan
 
         user = User(
             email=body.email.lower().strip(),
             password_hash=_hash_password(body.password),
-            role="admin" if is_first else "user",
-            plan="unlimited" if is_first else "free",
+            role=role,
+            plan=plan,
         )
         db.add(user)
+        await db.flush()  # Get user.id
+
+        # Mark license as used
+        if not is_first and lic:
+            from datetime import datetime, timezone
+            lic.used_by_user_id = user.id
+            lic.used_at = datetime.now(timezone.utc)
+
         await db.commit()
         await db.refresh(user)
 

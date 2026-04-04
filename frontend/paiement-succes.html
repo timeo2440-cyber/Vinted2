@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Paiement réussi — VintedBot</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#080910;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px}
+    .box{background:#0f1119;border:1px solid #1a1d2e;border-radius:20px;padding:48px 40px;max-width:480px;width:100%;text-align:center}
+    .icon{width:72px;height:72px;background:rgba(16,185,129,.15);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 24px}
+    h1{font-size:26px;font-weight:800;color:#e2e8f0;margin-bottom:10px}
+    .sub{color:#64748b;font-size:15px;margin-bottom:32px}
+    .key-box{background:#080910;border:2px solid #6c63ff;border-radius:12px;padding:20px;margin-bottom:24px}
+    .key-label{font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+    .key{font-size:14px;font-family:monospace;color:#a78bfa;word-break:break-all;font-weight:600}
+    .copy-btn{background:rgba(108,99,255,.15);color:#6c63ff;border:1px solid rgba(108,99,255,.3);padding:8px 20px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;transition:.15s}
+    .copy-btn:hover{background:rgba(108,99,255,.25)}
+    .copy-ok{color:#10b981;font-size:13px;display:none;margin-bottom:12px}
+    .steps{text-align:left;background:#080910;border:1px solid #1a1d2e;border-radius:12px;padding:20px;margin-bottom:24px;font-size:14px;color:#94a3b8;display:flex;flex-direction:column;gap:10px}
+    .steps li{display:flex;align-items:flex-start;gap:8px;list-style:none}
+    .steps .n{background:#6c63ff;color:#fff;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;margin-top:1px}
+    .btn-register{display:block;background:#6c63ff;color:#fff;padding:14px 28px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;transition:.15s;margin:0 auto}
+    .btn-register:hover{background:#5750e3;transform:translateY(-1px)}
+    .loading{color:#64748b;font-size:14px}
+  </style>
+</head>
+<body>
+<div class="box">
+  <div id="loading" class="loading">Vérification du paiement…</div>
+  <div id="success" style="display:none">
+    <div class="icon">✓</div>
+    <h1>Paiement confirmé !</h1>
+    <p class="sub">Voici ta clé d'activation. Garde-la précieusement.</p>
+    <div class="key-box">
+      <div class="key-label">Ta clé d'activation</div>
+      <div class="key" id="key-display">—</div>
+    </div>
+    <button class="copy-btn" onclick="copyKey()">Copier la clé</button>
+    <div class="copy-ok" id="copy-ok">✓ Copié !</div>
+    <ul class="steps">
+      <li><span class="n">1</span><span>Clique sur "Créer mon compte" ci-dessous</span></li>
+      <li><span class="n">2</span><span>Renseigne ton email et mot de passe</span></li>
+      <li><span class="n">3</span><span>Entre ta clé d'activation dans le champ prévu</span></li>
+      <li><span class="n">4</span><span>Configure tes filtres et c'est parti !</span></li>
+    </ul>
+    <a href="#" id="register-link" class="btn-register">Créer mon compte →</a>
+  </div>
+  <div id="error" style="display:none;color:#f87171;font-size:15px">
+    Paiement non confirmé. <a href="/" style="color:#6c63ff">Retour à l'accueil</a>
+  </div>
+</div>
+<script>
+let licKey = '';
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get('session_id');
+  const plan = params.get('plan') || 'starter';
+
+  if (!sessionId) {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('error').style.display = 'block';
+    return;
+  }
+  try {
+    const r = await fetch(`/api/payment/session/${sessionId}?plan=${plan}`);
+    const data = await r.json();
+    if (!r.ok) throw new Error();
+    licKey = data.key;
+    document.getElementById('key-display').textContent = licKey;
+    document.getElementById('register-link').href = `/register.html?plan=${plan}&key=${encodeURIComponent(licKey)}`;
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('success').style.display = 'block';
+  } catch {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('error').style.display = 'block';
+  }
+}
+function copyKey() {
+  navigator.clipboard.writeText(licKey).then(() => {
+    document.getElementById('copy-ok').style.display = 'block';
+    setTimeout(() => document.getElementById('copy-ok').style.display = 'none', 2000);
+  });
+}
+init();
+</script>
+</body>
+</html>
