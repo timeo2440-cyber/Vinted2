@@ -402,14 +402,13 @@
 .cat-wrap { position: relative; }
 .cat-wrap #ff-cat-input { cursor: pointer; }
 .cat-panel {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0; right: 0;
+  /* position:fixed + coordinates set via JS to escape modal overflow clipping */
+  position: fixed;
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
-  z-index: 400;
+  z-index: 9000;
   max-height: 360px;
   display: flex;
   flex-direction: column;
@@ -576,14 +575,12 @@
   position: relative;
 }
 .brand-dropdown {
-  position: absolute;
-  top: calc(100% + 2px);
-  left: 0;
-  right: 0;
+  /* position:fixed + coordinates set via JS to escape modal overflow clipping */
+  position: fixed;
   background: var(--bg-2);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
-  z-index: 300;
+  z-index: 9000;
   max-height: 280px;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
@@ -597,6 +594,7 @@
 }
 .brand-option:hover { background: var(--bg-hover); }
 .brand-option-empty { padding: 8px 12px; font-size: 12px; color: var(--text-muted); cursor: default; }
+.brand-option-manual { color: var(--accent); font-style: italic; border-top: 1px solid var(--border); }
 .brand-option-header {
   padding: 6px 12px 3px;
   font-size: 10px;

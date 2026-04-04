@@ -82,13 +82,14 @@ class WebSocketManager:
         """All items go to all users (global shared feed)."""
         await self.broadcast("new_item", {**item, "matched_filter_ids": matched_filter_ids})
 
-    async def broadcast_item_match(self, item: dict, filter_id: int, filter_name: str, user_id: int) -> None:
-        """Matches go only to the user who owns the filter."""
-        await self.send_to_user(user_id, "item_match", {
-            **item,
-            "filter_id": filter_id,
-            "filter_name": filter_name,
-        })
+    async def broadcast_item_match(self, item: dict, filter_id: int, filter_name: str, user_id) -> None:
+        """Matches go only to the user who owns the filter.
+        Falls back to broadcast if user_id is None (legacy filters with no owner)."""
+        payload = {**item, "filter_id": filter_id, "filter_name": filter_name}
+        if user_id is not None:
+            await self.send_to_user(int(user_id), "item_match", payload)
+        else:
+            await self.broadcast("item_match", payload)
 
     async def broadcast_buy_attempt(self, item_id: str, filter_id: int, user_id: int) -> None:
         await self.send_to_user(user_id, "buy_attempt", {

@@ -363,15 +363,16 @@ const filterForm = (() => {
     function renderBrandTags() {
       const wrap = div.querySelector('#ff-brand-tags');
       if (!wrap) return;
-      wrap.innerHTML = _selectedBrands.map(b =>
-        `<span class="brand-tag" data-id="${b.id}">
-           ${escHtml(b.title)}
-           <button type="button" class="brand-tag-remove" data-id="${b.id}" title="Retirer">×</button>
+      wrap.innerHTML = _selectedBrands.map((b, i) =>
+        `<span class="brand-tag" data-idx="${i}">
+           ${escHtml(b.title)}${b.id === null ? ' <small style="opacity:.6">(texte)</small>' : ''}
+           <button type="button" class="brand-tag-remove" data-idx="${i}" title="Retirer">×</button>
          </span>`
       ).join('');
       wrap.querySelectorAll('.brand-tag-remove').forEach(btn => {
         btn.addEventListener('click', () => {
-          _selectedBrands = _selectedBrands.filter(b => String(b.id) !== String(btn.dataset.id));
+          const idx = parseInt(btn.dataset.idx);
+          _selectedBrands.splice(idx, 1);
           renderBrandTags();
         });
       });
@@ -383,29 +384,47 @@ const filterForm = (() => {
     const brandDropdown = div.querySelector('#ff-brand-dropdown');
     let _brandDebounce  = null;
 
-    function _renderBrandOptions(brands) {
-      if (!brands || !brands.length) return;
-      brandDropdown.innerHTML = brands.map(b =>
+    function _positionBrandDropdown() {
+      const rect = brandInput.getBoundingClientRect();
+      brandDropdown.style.position = 'fixed';
+      brandDropdown.style.top   = (rect.bottom + 2) + 'px';
+      brandDropdown.style.left  = rect.left + 'px';
+      brandDropdown.style.width = rect.width + 'px';
+    }
+
+    function _renderBrandOptions(brands, query) {
+      let html = brands.map(b =>
         `<div class="brand-option" data-id="${b.id}" data-title="${escHtml(b.title)}">${escHtml(b.title)}</div>`
       ).join('');
+      // Allow adding any brand by name (for niche brands not in the list)
+      if (query && query.trim().length > 1) {
+        html += `<div class="brand-option brand-option-manual" data-id="" data-title="${escHtml(query.trim())}">
+          ➕ Ajouter "${escHtml(query.trim())}" manuellement
+        </div>`;
+      }
+      brandDropdown.innerHTML = html;
       brandDropdown.querySelectorAll('.brand-option').forEach(opt => {
         opt.addEventListener('mousedown', e => {
           e.preventDefault();
-          const id = parseInt(opt.dataset.id);
-          if (!_selectedBrands.find(b => b.id === id)) {
-            _selectedBrands.push({ id, title: opt.dataset.title });
+          const rawId = opt.dataset.id;
+          const title = opt.dataset.title;
+          const id = rawId ? parseInt(rawId) : null;
+          const key = id !== null ? id : title;
+          if (!_selectedBrands.find(b => (b.id !== null ? b.id : b.title) === key)) {
+            _selectedBrands.push({ id, title });
             renderBrandTags();
           }
           brandInput.value = '';
           brandDropdown.classList.add('hidden');
         });
       });
+      _positionBrandDropdown();
       brandDropdown.classList.remove('hidden');
     }
 
     brandInput.addEventListener('focus', () => {
       if (!brandInput.value.trim()) {
-        _renderBrandOptions(POPULAR_BRANDS);
+        _renderBrandOptions(POPULAR_BRANDS, '');
       }
     });
 
@@ -413,25 +432,35 @@ const filterForm = (() => {
       clearTimeout(_brandDebounce);
       const q = brandInput.value.trim();
       if (q.length < 1) {
-        _renderBrandOptions(POPULAR_BRANDS);
+        _renderBrandOptions(POPULAR_BRANDS, '');
         return;
       }
       // Filter popular brands locally first for instant feedback
       const qLow = q.toLowerCase();
       const localMatches = POPULAR_BRANDS.filter(b => b.title.toLowerCase().includes(qLow));
-      if (localMatches.length) _renderBrandOptions(localMatches);
+      _renderBrandOptions(localMatches.length ? localMatches : [], q);
 
       _brandDebounce = setTimeout(async () => {
         try {
           const { brands } = await api.searchBrands(q);
           if (brands && brands.length) {
-            _renderBrandOptions(brands);
-          } else if (!localMatches.length) {
-            brandDropdown.innerHTML = `<div class="brand-option-empty">Aucun résultat pour "${escHtml(q)}"</div>`;
-            brandDropdown.classList.remove('hidden');
+            _renderBrandOptions(brands, q);
           }
         } catch { /* keep local results */ }
       }, 300);
+    });
+
+    brandInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const q = brandInput.value.trim();
+        if (q.length > 1 && !_selectedBrands.find(b => b.title.toLowerCase() === q.toLowerCase())) {
+          _selectedBrands.push({ id: null, title: q });
+          renderBrandTags();
+          brandInput.value = '';
+          brandDropdown.classList.add('hidden');
+        }
+      }
     });
 
     brandInput.addEventListener('blur', () => {
@@ -469,10 +498,22 @@ const filterForm = (() => {
         _selectedCategories.push({ id, title, full_title: full });
         renderCategoryTags();
       }
-      _closeCatPanel();
+      // Panel stays open so user can select multiple categories
+      _updateCatInput();
+    }
+
+    function _updateCatInput() {
+      const n = _selectedCategories.length;
+      catInput.placeholder = n ? `${n} catégorie(s) — cliquez pour en ajouter` : 'Cliquez pour parcourir ou tapez pour chercher…';
     }
 
     function _openCatPanel() {
+      // Position fixed so it's not clipped by the modal's overflow-y:auto
+      const rect = catInput.getBoundingClientRect();
+      catPanel.style.position = 'fixed';
+      catPanel.style.top   = (rect.bottom + 4) + 'px';
+      catPanel.style.left  = rect.left + 'px';
+      catPanel.style.width = rect.width + 'px';
       catPanel.classList.remove('hidden');
       catSearch.focus();
       _renderTree(CATEGORY_TREE);
@@ -660,8 +701,10 @@ const filterForm = (() => {
     const countrySelect = container.querySelector('#ff-countries');
     const country_codes = [...countrySelect.selectedOptions].map(o => o.value);
 
-    const brand_ids   = _selectedBrands.length     ? _selectedBrands.map(b => b.id)             : null;
-    const brand_names = _selectedBrands.length     ? _selectedBrands.map(b => b.title)           : null;
+    // Brands with id=null are text-only (niche brands added manually)
+    const brandsWithId    = _selectedBrands.filter(b => b.id !== null);
+    const brand_ids   = brandsWithId.length       ? brandsWithId.map(b => b.id)   : null;
+    const brand_names = _selectedBrands.length    ? _selectedBrands.map(b => b.title) : null;
 
     const category_ids   = _selectedCategories.length ? _selectedCategories.map(c => c.id)       : null;
     const category_names = _selectedCategories.length ? _selectedCategories.map(c => c.full_title || c.title) : null;
