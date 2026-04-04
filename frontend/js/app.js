@@ -131,6 +131,42 @@
 
   document.addEventListener('keydown', e => { if (e.key === 'Escape') modal.close(); });
 
+  // ── Diagnostic global ─────────────────────────────────────────────────────
+  window.diagTest = async function() {
+    try {
+      // 1. Check diagnostic stats
+      const stats = await fetch('/api/bot/seen-count', {
+        headers: { 'Authorization': 'Bearer ' + auth.getToken() }
+      }).then(r => r.json());
+
+      // 2. Send WS ping test
+      const ping = await fetch('/api/bot/ping-ws', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + auth.getToken() }
+      }).then(r => r.json());
+
+      const lines = [
+        `<b>Diagnostic Flashcop</b>`,
+        ``,
+        `Articles scannés en DB : <b>${stats.seen_items_in_db}</b>`,
+        `Articles vus cette session : <b>${stats.items_seen_this_session}</b>`,
+        `Correspondances cette session : <b>${stats.items_matched_this_session}</b>`,
+        `Bot actif : <b>${stats.bot_running ? '✓ OUI' : '✗ NON'}</b>`,
+        ``,
+        `Connexions WS totales : <b>${stats.ws_connections_total}</b>`,
+        `Connexions WS pour toi : <b>${stats.ws_connections_for_you}</b>`,
+        ``,
+        ping.ws_connections > 0
+          ? `<span style="color:#10b981">✓ WS OK — un article test a été envoyé, vérifie le feed !</span>`
+          : `<span style="color:#f87171">✗ WS non authentifié — déconnecte-toi et reconnecte-toi</span>`,
+      ];
+
+      modal.open('Diagnostic', `<div style="font-size:14px;line-height:2;font-family:monospace">${lines.join('<br>')}</div>`);
+    } catch(e) {
+      toast.show('Erreur diagnostic : ' + e.message, 'error');
+    }
+  };
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   function _renderUserMenu() {
     const user = auth.getUser();

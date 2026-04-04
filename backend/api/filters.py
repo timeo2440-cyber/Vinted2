@@ -1,15 +1,18 @@
 import json
 import asyncio
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from database import get_db, Filter, SeenItem, User
+from database import get_db, Filter, SeenItem, User, AsyncSessionLocal
 from models import FilterCreate, FilterUpdate, FilterOut
 from bot.filter_engine import FilterEngine
 from auth_deps import get_current_user, check_plan_limit
+from ws.manager import ws_manager
 
 router = APIRouter(prefix="/api/filters", tags=["filters"])
 _engine = FilterEngine()
+logger = logging.getLogger("api.filters")
 
 
 async def _replay_filter_on_seen_items(f: Filter, user_id: int) -> None:
@@ -18,37 +21,58 @@ async def _replay_filter_on_seen_items(f: Filter, user_id: int) -> None:
     500 seen items and send item_match WS events for anything that matches.
     This fills the feed instantly instead of waiting for the next poll cycle.
     """
-    from ws.manager import ws_manager
-
-    async with __import__('database').AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(SeenItem).order_by(SeenItem.first_seen_at.desc()).limit(500)
-        )
-        items = result.scalars().all()
-
-    matched = 0
-    for item in items:
-        item_dict = {
-            "id": item.vinted_id,
-            "title": item.title,
-            "price": item.price,
-            "brand": item.brand,
-            "brand_id": item.brand_id,
-            "size": item.size,
-            "size_id": item.size_id,
-            "condition": item.condition,
-            "condition_code": getattr(item, "condition_code", None),
-            "photo_url": item.photo_url,
-            "item_url": item.item_url,
-            "country_code": item.country_code,
-        }
-        if _engine.match_item(item_dict, f):
-            await ws_manager.broadcast_item_match(
-                item_dict, f.id, f.name, user_id=user_id
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(SeenItem).order_by(SeenItem.first_seen_at.desc()).limit(500)
             )
-            matched += 1
-            if matched >= 50:   # max 50 retroactive matches to not spam the feed
-                break
+            items = result.scalars().all()
+
+        logger.info(f"Replay filtre '{f.name}' (user {user_id}) sur {len(items)} articles vus")
+
+        matched = 0
+        for item in items:
+            item_dict = {
+                "id": item.vinted_id,
+                "title": item.title,
+                "price": item.price,
+                "brand": item.brand,
+                "brand_id": getattr(item, "brand_id", None),
+                "size": item.size,
+                "size_id": getattr(item, "size_id", None),
+                "condition": item.condition,
+                "condition_code": getattr(item, "condition_code", None),
+                "photo_url": item.photo_url,
+                "item_url": item.item_url,
+                "country_code": item.country_code,
+            }
+            if _engine.match_item(item_dict, f):
+                await ws_manager.broadcast_item_match(
+                    item_dict, f.id, f.name, user_id=user_id
+                )
+                matched += 1
+                if matched >= 50:
+                    break
+
+        logger.info(f"Replay terminé: {matched} correspondance(s) pour filtre '{f.name}'")
+
+        # If seen_items was empty, the bot hasn't fetched anything yet.
+        # Log a hint so the user knows to wait or check settings.
+        if not items:
+            logger.warning(
+                f"Replay: aucun article en base (bot vient de démarrer ou Vinted inaccessible). "
+                f"Les résultats apparaîtront dès que le bot scrappe des articles."
+            )
+            await ws_manager.broadcast_log(
+                "warn",
+                "Aucun article encore scanné — le bot démarre. "
+                "Les correspondances apparaîtront dès que Vinted est scrappé (< 10s).",
+                "filters",
+                user_id=user_id,
+            )
+
+    except Exception as e:
+        logger.error(f"Replay filter error: {e}", exc_info=True)
 
 
 

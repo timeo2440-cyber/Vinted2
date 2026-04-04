@@ -179,3 +179,57 @@ async def manual_buy(
     })
 
     return {"success": result.success, "error": result.error, "price_paid": result.price_paid}
+
+
+@router.post("/ping-ws")
+async def ping_ws(
+    request: Request,
+    user: User = Depends(get_current_user),
+):
+    """
+    Send a fake item_match event to the current user via WebSocket.
+    Used to verify the WS pipeline is working end-to-end.
+    """
+    ws = request.app.state.ws_manager
+    fake_item = {
+        "id": "test-" + str(user.id),
+        "title": "TEST — Connexion WebSocket OK !",
+        "price": 0.0,
+        "brand": "Flashcop",
+        "size": "Test",
+        "condition": "Neuf",
+        "photo_url": None,
+        "item_url": "#",
+        "country_code": "FR",
+    }
+    await ws.broadcast_item_match(fake_item, 0, "TEST", user_id=user.id)
+    conns = ws._user_connections.get(user.id, [])
+    return {
+        "ok": True,
+        "ws_connections": len(conns),
+        "user_id": user.id,
+        "message": f"Événement envoyé à {len(conns)} connexion(s) WS pour user {user.id}",
+    }
+
+
+@router.get("/seen-count")
+async def seen_count(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Quick diagnostic: how many seen items in DB and bot status."""
+    from sqlalchemy import func
+    from database import SeenItem
+    result = await db.execute(select(func.count()).select_from(SeenItem))
+    count = result.scalar()
+    poller = request.app.state.poller
+    ws = request.app.state.ws_manager
+    return {
+        "seen_items_in_db": count,
+        "bot_running": poller.running,
+        "items_seen_this_session": poller.items_seen,
+        "items_matched_this_session": poller.items_matched,
+        "ws_connections_total": ws.connection_count,
+        "ws_connections_for_you": len(ws._user_connections.get(user.id, [])),
+    }
