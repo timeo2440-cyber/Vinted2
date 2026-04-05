@@ -24,7 +24,7 @@ class FilterEngine:
         if keywords and not self._match_keywords(item, keywords):
             return False
 
-        # Category check — match by ID, OR trust targeted fetch, OR skip if unknown
+        # Category check — match by ID, OR trust targeted fetch, OR reject if unknown
         category_ids = self._parse_json_list(get("category_ids"))
         if category_ids:
             item_cat_id = item.get("category_id")
@@ -35,11 +35,10 @@ class FilterEngine:
                 pass  # exact ID match
             elif targeted_cat_ids and set(str(c) for c in category_ids) & set(targeted_cat_ids):
                 pass  # item was fetched by Vinted with these category params — trust it
-            elif item_cat_id is not None:
-                return False  # has a category but it doesn't match
-            # else: no category_id info at all — skip check (can't determine)
+            else:
+                return False  # no category match (wrong ID or missing info)
 
-        # Brand check — ID match, targeted-fetch trust, text fallback, or skip
+        # Brand check — ID match, targeted-fetch trust, text fallback, or reject
         brand_ids = self._parse_json_list(get("brand_ids"))
         if brand_ids:
             item_brand_id = str(item.get("brand_id") or "")
@@ -53,16 +52,16 @@ class FilterEngine:
             elif not item_brand_id:
                 # No brand_id — text fallback using stored brand names
                 brand_names = self._parse_json_list(get("brand_names"))
-                if brand_names:
-                    item_brand = (item.get("brand") or "").lower().strip()
-                    if item_brand:  # only filter if item actually has brand text
-                        if not any(
-                            bn.lower() in item_brand or item_brand in bn.lower()
-                            for bn in brand_names if bn
-                        ):
-                            return False
-                    # no brand text at all → skip check (can't determine)
-                # no brand_names stored → skip check
+                item_brand = (item.get("brand") or "").lower().strip()
+                if brand_names and item_brand:
+                    if not any(
+                        bn.lower() in item_brand or item_brand in bn.lower()
+                        for bn in brand_names if bn
+                    ):
+                        return False
+                else:
+                    # No brand text or no brand_names to compare → reject
+                    return False
             else:
                 # Has a brand_id but it doesn't match any filter brand
                 return False
