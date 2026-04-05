@@ -173,12 +173,11 @@ class ItemPoller:
 
             # --- Targeted ID-based fetch ---
             if brand_ids or category_ids or size_ids:
-                # Deduplicate identical param combos (include keywords)
+                # Deduplicate identical param combos
                 key = (
                     tuple(sorted(brand_ids)),
                     tuple(sorted(category_ids)),
                     tuple(sorted(size_ids)),
-                    keywords.lower() if keywords else "",
                 )
                 if key not in seen_param_keys:
                     seen_param_keys.add(key)
@@ -192,7 +191,6 @@ class ItemPoller:
                             size_ids=[int(s) for s in size_ids] if size_ids else None,
                             price_from=f.price_min,
                             price_to=f.price_max,
-                            keywords=keywords or None,
                         )
                         # Tag items with the search parameters so filter_engine
                         # can trust Vinted's server-side filtering (handles missing
