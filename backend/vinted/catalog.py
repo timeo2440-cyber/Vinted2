@@ -93,6 +93,7 @@ async def fetch_newest_items(
     size_ids: Optional[list[int]] = None,
     price_from: Optional[float] = None,
     price_to: Optional[float] = None,
+    keywords: Optional[str] = None,
 ) -> list[dict]:
     """Fetch the newest items from Vinted catalog."""
     params: dict = {
@@ -110,6 +111,8 @@ async def fetch_newest_items(
         params["price_from"] = price_from
     if price_to is not None:
         params["price_to"] = price_to
+    if keywords:
+        params["search_text"] = keywords
 
     try:
         data = await client.get("/catalog/items", params=params)

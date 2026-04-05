@@ -83,6 +83,7 @@ async def _replay_filter_on_seen_items(f: Filter, user_id: int, vinted_client=No
                         brand_ids=[int(b) for b in brand_ids] if brand_ids else None,
                         category_ids=[int(c) for c in category_ids] if category_ids else None,
                         size_ids=[int(s) for s in size_ids] if size_ids else None,
+                        keywords=keywords or None,
                     )
                     # Tag items so filter_engine trusts the targeted fetch
                     for item in fresh_items:
