@@ -13,8 +13,13 @@ from curl_cffi.curl import CurlError
 
 from vinted.exceptions import VintedAuthError, VintedRateLimitError, VintedNetworkError
 
-# Rotate between recent Chrome versions
-CHROME_VERSIONS = ["chrome120", "chrome124", "chrome131"]
+# Rotate between recent Chrome versions — newest first for better CF bypass
+CHROME_VERSIONS = ["chrome131", "chrome124", "chrome120"]
+
+# Realistic browser Accept headers
+_ACCEPT_HTML = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"
+_ACCEPT_JSON = "application/json, text/plain, */*"
+_ACCEPT_LANG = "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7"
 
 
 class VintedClient:
@@ -30,7 +35,7 @@ class VintedClient:
         session = AsyncSession(
             impersonate=self._impersonate,
             verify=True,
-            timeout=20,
+            timeout=30,
         )
         for name, value in self._cookies.items():
             session.cookies.set(name, value, domain=".vinted.fr")
@@ -66,10 +71,15 @@ class VintedClient:
         url = f"{self.api_base}{path}" if path.startswith("/") else path
 
         headers = kwargs.pop("headers", {})
-        headers.setdefault("Accept", "application/json, text/plain, */*")
-        headers.setdefault("Accept-Language", "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7")
+        headers.setdefault("Accept", _ACCEPT_JSON)
+        headers.setdefault("Accept-Language", _ACCEPT_LANG)
+        headers.setdefault("Accept-Encoding", "gzip, deflate, br")
         headers.setdefault("Referer", f"{self.base_url}/catalog")
+        headers.setdefault("Origin", self.base_url)
         headers.setdefault("X-Requested-With", "XMLHttpRequest")
+        headers.setdefault("Sec-Fetch-Dest", "empty")
+        headers.setdefault("Sec-Fetch-Mode", "cors")
+        headers.setdefault("Sec-Fetch-Site", "same-origin")
         if self._csrf_token:
             headers["X-CSRF-Token"] = self._csrf_token
 
@@ -146,9 +156,15 @@ class VintedClient:
             resp = await self._session.get(
                 self.base_url,
                 headers={
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                    "Accept-Language": "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7",
+                    "Accept": _ACCEPT_HTML,
+                    "Accept-Language": _ACCEPT_LANG,
+                    "Accept-Encoding": "gzip, deflate, br",
                     "Upgrade-Insecure-Requests": "1",
+                    "Sec-Fetch-Dest": "document",
+                    "Sec-Fetch-Mode": "navigate",
+                    "Sec-Fetch-Site": "none",
+                    "Sec-Fetch-User": "?1",
+                    "Cache-Control": "max-age=0",
                 },
             )
 

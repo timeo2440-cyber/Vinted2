@@ -41,7 +41,6 @@ const accountsView = (() => {
         if (action === 'delete')   _deleteAccount(+id);
         if (action === 'relogin')  _reloginAccount(+id);
         if (action === 'edit')     _openEditModal(+id);
-        if (action === 'cookies')  _openCookiesModal(+id);
         if (action === 'verify')   _verifyAccount(+id, el);
       });
     });
@@ -83,9 +82,6 @@ const accountsView = (() => {
         </label>
         <button class="btn-ghost btn-xs" data-action="relogin" data-id="${a.id}" title="Re-connecter">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-        </button>
-        <button class="btn-ghost btn-xs" data-action="cookies" data-id="${a.id}" title="Cookies manuels">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         </button>
         <button class="btn-ghost btn-xs" data-action="edit" data-id="${a.id}" title="Modifier">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
