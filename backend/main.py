@@ -177,6 +177,12 @@ async def websocket_endpoint(
         ws_manager.disconnect(websocket, user_id=user_id)
 
 
+# ── Health check (pour Render/Railway/Docker) ─────────────────────────────────
+@app.get("/api/health", include_in_schema=False)
+async def health():
+    return {"status": "ok"}
+
+
 # ── Static / SPA ───────────────────────────────────────────────────────────────
 frontend_dir = app_settings.frontend_dir
 if os.path.isdir(frontend_dir):

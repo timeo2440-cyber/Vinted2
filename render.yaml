@@ -1,17 +1,22 @@
 services:
   - type: web
-    name: vinted-autobot
-    runtime: python
-    buildCommand: pip install -r backend/requirements.txt
-    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    name: flashcop
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter        # 7$/mois — toujours actif, ne s'éteint jamais
+    healthCheckPath: /api/health
     envVars:
       - key: DATABASE_URL
-        value: sqlite+aiosqlite:////opt/render/project/src/data/vinted_bot.db
+        value: sqlite+aiosqlite:////app/data/flashcop.db
       - key: FRONTEND_DIR
-        value: /opt/render/project/src/frontend
-      - key: PORT
-        generateValue: false
+        value: /app/frontend
+      - key: SECRET_KEY
+        generateValue: true   # Render génère une clé sécurisée automatiquement
+      - key: ADMIN_EMAIL
+        value: admin@flashcop.com
+      - key: ADMIN_PASSWORD
+        generateValue: true
     disk:
-      name: data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 1
+      name: flashcop-data
+      mountPath: /app/data
+      sizeGB: 5
