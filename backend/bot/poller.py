@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy import select
@@ -24,7 +25,7 @@ class ItemPoller:
         self.buy_engine = BuyEngine(client, ws_manager, account_manager)
         self.rate_limiter = AdaptiveRateLimiter()
         self.running = False
-        self.seen_ids: set[str] = set()
+        self.seen_ids: OrderedDict = OrderedDict()  # id → None, insertion-ordered for FIFO eviction
         self.items_seen: int = 0
         self.items_matched: int = 0
         self._start_time: Optional[float] = None
@@ -62,7 +63,7 @@ class ItemPoller:
                 select(SeenItem.vinted_id).order_by(SeenItem.first_seen_at.desc()).limit(2000)
             )
             for row in result.scalars():
-                self.seen_ids.add(row)
+                self.seen_ids[row] = None
 
     async def _loop(self) -> None:
         await self._log("info", "Initialisation de la session Vinted…", "poller")
@@ -276,10 +277,9 @@ class ItemPoller:
             if not item_id or item_id in self.seen_ids:
                 continue
             new_items.append(item)
-            self.seen_ids.add(item_id)
-            if len(self.seen_ids) > self._max_seen_cache:
-                excess = len(self.seen_ids) - self._max_seen_cache
-                self.seen_ids = set(list(self.seen_ids)[excess:])
+            self.seen_ids[item_id] = None
+            while len(self.seen_ids) > self._max_seen_cache:
+                self.seen_ids.popitem(last=False)  # Evict oldest entry (FIFO)
 
         if not new_items:
             await asyncio.sleep(poll_interval)

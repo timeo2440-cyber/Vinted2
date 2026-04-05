@@ -144,6 +144,8 @@ const wsClient = (() => {
   }
 
   function handleMatchedItem(data) {
+    // Deduplicate: skip if this item is already in the store (replay + poller can both fire)
+    if (store.get('recentItems').some(i => i.id === data.id)) return;
     const item = { ...data, status: 'matched', _ts: Date.now() };
     store.pushItem(item);
     dashboardView.prependItem(item);

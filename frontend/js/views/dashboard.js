@@ -42,6 +42,8 @@ const dashboardView = (() => {
     if (paused) return;
 
     const feed = document.getElementById('item-feed');
+    // DOM-level dedup safety net (in case store check was bypassed)
+    if (feed.querySelector(`[data-id="${item.id}"]`)) return;
     showEmpty(false);
 
     const card = itemCard.create(item);
