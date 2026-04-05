@@ -9,18 +9,26 @@ from models import FilterCreate, FilterUpdate, FilterOut
 from bot.filter_engine import FilterEngine
 from auth_deps import get_current_user, check_plan_limit
 from ws.manager import ws_manager
+from vinted.catalog import fetch_newest_items as _vinted_fetch_newest, search_items as _vinted_search
 
 router = APIRouter(prefix="/api/filters", tags=["filters"])
 _engine = FilterEngine()
 logger = logging.getLogger("api.filters")
 
 
-async def _replay_filter_on_seen_items(f: Filter, user_id: int) -> None:
+async def _replay_filter_on_seen_items(f: Filter, user_id: int, vinted_client=None) -> None:
     """
     After a filter is created/updated, immediately replay it against the last
     500 seen items and send item_match WS events for anything that matches.
-    This fills the feed instantly instead of waiting for the next poll cycle.
+    If 0 matches found in DB (brand_id/category_id may be missing for old items),
+    fall back to a fresh targeted fetch from Vinted.
     """
+    def _parse(val):
+        if not val: return []
+        if isinstance(val, list): return val
+        try: return json.loads(val)
+        except: return []
+
     try:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
@@ -55,11 +63,62 @@ async def _replay_filter_on_seen_items(f: Filter, user_id: int) -> None:
                 if matched >= 50:
                     break
 
-        logger.info(f"Replay terminé: {matched} correspondance(s) pour filtre '{f.name}'")
+        logger.info(f"Replay DB terminé: {matched} correspondance(s) pour filtre '{f.name}'")
+
+        # If 0 matches from DB replay, do a fresh live fetch from Vinted.
+        # This handles the case where seen_items don't have brand_id/category_id stored,
+        # or where all current matching items were already in seen_ids before the filter was created.
+        if matched == 0 and vinted_client:
+            brand_ids   = _parse(f.brand_ids)
+            category_ids = _parse(f.category_ids)
+            size_ids    = _parse(f.size_ids)
+            keywords    = (f.keywords or "").strip()
+
+            try:
+                fresh_items = []
+                if brand_ids or category_ids or size_ids:
+                    fresh_items = await _vinted_fetch_newest(
+                        vinted_client,
+                        per_page=30,
+                        brand_ids=[int(b) for b in brand_ids] if brand_ids else None,
+                        category_ids=[int(c) for c in category_ids] if category_ids else None,
+                        size_ids=[int(s) for s in size_ids] if size_ids else None,
+                    )
+                    # Tag items so filter_engine trusts the targeted fetch
+                    for item in fresh_items:
+                        if brand_ids:
+                            item["_targeted_brand_ids"] = [int(b) for b in brand_ids]
+                        if category_ids:
+                            item["_targeted_category_ids"] = [int(c) for c in category_ids]
+                elif keywords:
+                    fresh_items = await _vinted_search(vinted_client, query=keywords, per_page=30)
+
+                fresh_matched = 0
+                for item in fresh_items:
+                    if _engine.match_item(item, f):
+                        await ws_manager.broadcast_item_match(
+                            item, f.id, f.name, user_id=user_id
+                        )
+                        fresh_matched += 1
+                        matched += 1
+                        if matched >= 50:
+                            break
+
+                if fresh_matched > 0:
+                    logger.info(
+                        f"Replay (fetch live): {fresh_matched} correspondance(s) pour filtre '{f.name}'"
+                    )
+                else:
+                    logger.info(
+                        f"Replay (fetch live): 0 correspondance pour filtre '{f.name}' "
+                        f"— les nouvelles annonces apparaîtront dès qu'elles sont postées."
+                    )
+
+            except Exception as e:
+                logger.warning(f"Replay live fetch échoué pour filtre '{f.name}': {e}")
 
         # If seen_items was empty, the bot hasn't fetched anything yet.
-        # Log a hint so the user knows to wait or check settings.
-        if not items:
+        if not items and matched == 0:
             logger.warning(
                 f"Replay: aucun article en base (bot vient de démarrer ou Vinted inaccessible). "
                 f"Les résultats apparaîtront dès que le bot scrappe des articles."
@@ -132,6 +191,7 @@ async def list_filters(
 
 @router.post("", response_model=FilterOut, status_code=201)
 async def create_filter(
+    request: Request,
     payload: FilterCreate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -166,9 +226,11 @@ async def create_filter(
     await db.commit()
     await db.refresh(f)
 
-    # Replay immediately on already-seen items so the feed isn't empty
+    # Replay immediately on already-seen items so the feed isn't empty.
+    # Pass the Vinted client so a live fetch is done if DB replay finds nothing.
     if f.enabled:
-        asyncio.create_task(_replay_filter_on_seen_items(f, user.id))
+        vinted_client = getattr(request.app.state, "vinted_client", None)
+        asyncio.create_task(_replay_filter_on_seen_items(f, user.id, vinted_client))
 
     return _serialize_filter(f)
 
@@ -188,6 +250,7 @@ async def get_filter(
 @router.put("/{filter_id}", response_model=FilterOut)
 async def replace_filter(
     filter_id: int,
+    request: Request,
     payload: FilterCreate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -203,13 +266,15 @@ async def replace_filter(
     await db.commit()
     await db.refresh(f)
     if f.enabled:
-        asyncio.create_task(_replay_filter_on_seen_items(f, user.id))
+        vinted_client = getattr(request.app.state, "vinted_client", None)
+        asyncio.create_task(_replay_filter_on_seen_items(f, user.id, vinted_client))
     return _serialize_filter(f)
 
 
 @router.patch("/{filter_id}", response_model=FilterOut)
 async def update_filter(
     filter_id: int,
+    request: Request,
     payload: FilterUpdate,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -226,7 +291,8 @@ async def update_filter(
     await db.commit()
     await db.refresh(f)
     if f.enabled:
-        asyncio.create_task(_replay_filter_on_seen_items(f, user.id))
+        vinted_client = getattr(request.app.state, "vinted_client", None)
+        asyncio.create_task(_replay_filter_on_seen_items(f, user.id, vinted_client))
     return _serialize_filter(f)
 
 
