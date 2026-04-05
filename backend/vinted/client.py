@@ -123,7 +123,24 @@ class VintedClient:
         """
         Load Vinted homepage to get session cookies + CSRF token.
         curl_cffi automatically passes Cloudflare JS challenges via Chrome TLS fingerprint.
+        Retries up to 3 times with a new session on failure.
         """
+        for _attempt in range(3):
+            result = await self._fetch_csrf_token_once()
+            if result:
+                return result
+            # Rebuild session with a different Chrome version before retrying
+            if self._session:
+                try:
+                    await self._session.close()
+                except Exception:
+                    pass
+            self._impersonate = random.choice(CHROME_VERSIONS)
+            self._session = self._build_session()
+            await asyncio.sleep(5)
+        return None
+
+    async def _fetch_csrf_token_once(self) -> Optional[str]:
         await self._ensure_session()
         try:
             resp = await self._session.get(

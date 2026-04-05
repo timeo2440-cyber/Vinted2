@@ -82,23 +82,25 @@ class ItemPoller:
                 await self._poll_cycle()
                 self.rate_limiter.on_success()
                 self._consecutive_errors = 0
-            except VintedAuthError as e:
+            except VintedAuthError:
                 self._consecutive_errors += 1
-                await self._log("warn",
-                    "Erreur d'authentification Vinted (403/401). "
-                    "Tentative de réinitialisation de la session…", "auth")
-                try:
-                    csrf = await self.client.fetch_csrf_token()
-                    if csrf:
-                        await self._log("info", "Session réinitialisée avec succès.", "auth")
-                    else:
-                        await self._log("error",
-                            "Réinitialisation échouée. "
-                            "➜ Copiez vos cookies Vinted dans Paramètres pour débloquer.", "auth")
-                        await self.ws.broadcast_auth_error(str(e))
-                except Exception as ex:
-                    await self._log("error", f"Réinitialisation échouée : {ex}", "auth")
-                await asyncio.sleep(15)
+                # Session expirée — tenter de renouveler automatiquement (session anonyme suffit)
+                renewed = False
+                for attempt in range(5):
+                    wait = 10 * (attempt + 1)
+                    await asyncio.sleep(wait)
+                    try:
+                        csrf = await self.client.fetch_csrf_token()
+                        if csrf:
+                            await self._log("info", "Session Vinted renouvelée automatiquement.", "auth")
+                            self._consecutive_errors = 0
+                            renewed = True
+                            break
+                    except Exception:
+                        pass
+                if not renewed:
+                    # Attendre et réessayer silencieusement au prochain cycle
+                    await asyncio.sleep(60)
             except VintedRateLimitError as e:
                 self._consecutive_errors += 1
                 self.rate_limiter.on_rate_limited(e.retry_after)
