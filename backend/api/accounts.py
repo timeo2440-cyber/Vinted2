@@ -25,6 +25,8 @@ class AccountUpdate(BaseModel):
     ban_suspected: Optional[bool] = None
     default_address: Optional[dict] = None
     preferred_pickup_points: Optional[list] = None
+    phone_number: Optional[str] = None
+    payment_card: Optional[dict] = None  # {number, expiry, cvv, holder}
 
 
 class CookiesBody(BaseModel):
@@ -45,6 +47,8 @@ def _serialize(account: Account) -> dict:
         "last_login": account.last_login.isoformat() if account.last_login else None,
         "default_address": json.loads(account.default_address) if account.default_address else None,
         "preferred_pickup_points": json.loads(account.preferred_pickup_points) if account.preferred_pickup_points else [],
+        "phone_number": account.phone_number,
+        "payment_card": json.loads(account.payment_card) if account.payment_card else None,
         "created_at": account.created_at.isoformat() if account.created_at else None,
     }
 
@@ -135,6 +139,10 @@ async def update_account(account_id: int, body: AccountUpdate, request: Request,
             account.default_address = json.dumps(body.default_address)
         if body.preferred_pickup_points is not None:
             account.preferred_pickup_points = json.dumps(body.preferred_pickup_points)
+        if body.phone_number is not None:
+            account.phone_number = body.phone_number or None
+        if body.payment_card is not None:
+            account.payment_card = json.dumps(body.payment_card) if body.payment_card else None
         await db.commit()
         await db.refresh(account)
 

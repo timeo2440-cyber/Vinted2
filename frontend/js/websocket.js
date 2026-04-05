@@ -96,7 +96,6 @@ const wsClient = (() => {
         handleMatchedItem(data);
         store.set('itemsMatched', store.get('itemsMatched') + 1);
         document.getElementById('stat-matched').textContent = store.get('itemsMatched');
-        playBeep();
         break;
 
       case 'buy_attempt':
@@ -149,9 +148,6 @@ const wsClient = (() => {
     const item = { ...data, status: 'matched', _ts: Date.now() };
     store.pushItem(item);
     dashboardView.prependItem(item);
-    // Toast for immediate visibility
-    const label = item.filter_name ? ` [${item.filter_name}]` : '';
-    toast.show(`⚡ Match${label} : ${item.title || 'Article'} — ${item.price != null ? item.price + '€' : ''}`, 'success');
   }
 
   function startPing() {

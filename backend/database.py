@@ -177,6 +177,8 @@ class Account(Base):
 
     default_address: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     preferred_pickup_points: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    phone_number: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    payment_card: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON: {number, expiry, cvv, holder}
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     ban_suspected: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -229,6 +231,13 @@ async def _run_migrations():
         if await table_exists("filters"):
             if not await column_exists("filters", "brand_names"):
                 await conn.execute(text("ALTER TABLE filters ADD COLUMN brand_names TEXT"))
+
+        # Add phone_number and payment_card to accounts if missing
+        if await table_exists("accounts"):
+            if not await column_exists("accounts", "phone_number"):
+                await conn.execute(text("ALTER TABLE accounts ADD COLUMN phone_number TEXT"))
+            if not await column_exists("accounts", "payment_card"):
+                await conn.execute(text("ALTER TABLE accounts ADD COLUMN payment_card TEXT"))
 
         # Create promo_codes table if missing (new feature)
         if not await table_exists("promo_codes"):

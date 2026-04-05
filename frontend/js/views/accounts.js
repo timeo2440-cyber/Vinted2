@@ -166,12 +166,30 @@ const accountsView = (() => {
 
     const addr = a.default_address || {};
     const pickups = (a.preferred_pickup_points || []).join('\n');
+    const card = a.payment_card || {};
 
     const body = document.createElement('div');
     body.innerHTML = `
       <div class="form-group">
         <label>Nom du compte</label>
         <input type="text" id="ef-name" class="input-field" value="${_esc(a.name)}">
+      </div>
+
+      <div class="form-group">
+        <label>Numéro de téléphone</label>
+        <input type="tel" id="ef-phone" class="input-field" placeholder="+33 6 12 34 56 78" value="${_esc(a.phone_number || '')}">
+        <small>Utilisé pour le suivi des colis.</small>
+      </div>
+
+      <div class="form-group">
+        <label>Carte bancaire</label>
+        <input type="text" id="ef-card-number" class="input-field" placeholder="1234 5678 9012 3456" value="${_esc(card.number || '')}" style="margin-bottom:6px" maxlength="19">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+          <input type="text" id="ef-card-expiry" class="input-field" placeholder="MM/AA" value="${_esc(card.expiry || '')}" maxlength="5">
+          <input type="text" id="ef-card-cvv" class="input-field" placeholder="CVV" value="${_esc(card.cvv || '')}" maxlength="4">
+          <input type="text" id="ef-card-holder" class="input-field" placeholder="Titulaire" value="${_esc(card.holder || '')}">
+        </div>
+        <small>Stockée localement, utilisée pour les achats automatiques.</small>
       </div>
 
       <div class="form-group">
@@ -213,23 +231,34 @@ const accountsView = (() => {
 
     document.getElementById('ef-cancel').onclick = () => modal.close();
     document.getElementById('ef-save').onclick = async () => {
-      const name    = document.getElementById('ef-name').value.trim();
-      const street  = document.getElementById('ef-street').value.trim();
-      const zip     = document.getElementById('ef-zip').value.trim();
-      const city    = document.getElementById('ef-city').value.trim();
-      const country = document.getElementById('ef-country').value.trim();
-      const active  = document.getElementById('ef-active').checked;
-      const banned  = document.getElementById('ef-banned').checked;
+      const name       = document.getElementById('ef-name').value.trim();
+      const phone      = document.getElementById('ef-phone').value.trim();
+      const cardNumber = document.getElementById('ef-card-number').value.replace(/\s/g, '').trim();
+      const cardExpiry = document.getElementById('ef-card-expiry').value.trim();
+      const cardCvv    = document.getElementById('ef-card-cvv').value.trim();
+      const cardHolder = document.getElementById('ef-card-holder').value.trim();
+      const street     = document.getElementById('ef-street').value.trim();
+      const zip        = document.getElementById('ef-zip').value.trim();
+      const city       = document.getElementById('ef-city').value.trim();
+      const country    = document.getElementById('ef-country').value.trim();
+      const active     = document.getElementById('ef-active').checked;
+      const banned     = document.getElementById('ef-banned').checked;
       const pickupsRaw = document.getElementById('ef-pickups').value;
-      const pickups = pickupsRaw.split('\n').map(s => s.trim()).filter(Boolean);
+      const pickups    = pickupsRaw.split('\n').map(s => s.trim()).filter(Boolean);
 
       const default_address = (street || city || zip)
         ? { street, zip, city, country }
         : null;
 
+      const payment_card = cardNumber
+        ? { number: cardNumber, expiry: cardExpiry, cvv: cardCvv, holder: cardHolder }
+        : null;
+
       try {
         await api.updateAccount(id, {
           name: name || undefined,
+          phone_number: phone || null,
+          payment_card,
           is_active: active,
           ban_suspected: banned,
           default_address,

@@ -39,6 +39,9 @@ const itemCard = (() => {
 
     const price = item.price != null ? `${parseFloat(item.price).toFixed(2)} €` : '—';
 
+    // Use Vinted's publication timestamp if available, otherwise fall back to received time
+    const pubTs = item.created_at_ts ? item.created_at_ts * 1000 : item._ts;
+
     el.innerHTML = `
       <a class="item-photo-wrap" href="${item.item_url || '#'}" target="_blank" rel="noopener">
         ${photo}
@@ -46,7 +49,7 @@ const itemCard = (() => {
       <div class="item-info">
         <div class="item-header-row">
           <span class="item-price">${price}</span>
-          ${statusBadgeHtml(item.status)}
+          <span class="item-time-badge">🕒 ${timeAgo(pubTs)}</span>
         </div>
         <div class="item-title">${escHtml(item.title || 'Article sans titre')}</div>
         <div class="item-meta">
@@ -56,7 +59,6 @@ const itemCard = (() => {
           ${filterTag}
         </div>
         <div class="item-footer-row">
-          <span class="item-time">${timeAgo(item._ts)}</span>
           <div class="item-actions">
             ${item.item_url ? `<a class="btn-item-view" href="${item.item_url}" target="_blank" rel="noopener">Voir</a>` : ''}
             <button class="btn-item-buy" data-id="${escHtml(item.id)}" data-title="${escHtml(item.title||'')}" data-price="${item.price||''}" data-url="${escHtml(item.item_url||'')}">
@@ -123,8 +125,6 @@ const itemCard = (() => {
   function updateStatus(cardEl, status) {
     if (!cardEl) return;
     cardEl.className = `item-card ${status}`;
-    const badge = cardEl.querySelector('.badge-status');
-    if (badge) badge.outerHTML = statusBadgeHtml(status);
   }
 
   function escHtml(s) {
