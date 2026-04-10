@@ -1,4 +1,5 @@
 import asyncio
+import json
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from sqlalchemy import select, func as sa_func
@@ -77,6 +78,18 @@ class BuyEngine:
                 "buy", user_id=user_id,
             )
 
+            # Load account info (address + card) for checkout
+            account_info = None
+            if account_id:
+                async with AsyncSessionLocal() as db:
+                    acc = await db.get(Account, account_id)
+                    if acc:
+                        account_info = {
+                            "default_address": json.loads(acc.default_address) if acc.default_address else None,
+                            "payment_card": json.loads(acc.payment_card) if acc.payment_card else None,
+                            "phone_number": acc.phone_number,
+                        }
+
             async with AsyncSessionLocal() as db:
                 purchase = Purchase(
                     user_id=user_id,
@@ -92,7 +105,7 @@ class BuyEngine:
                 await db.refresh(purchase)
                 purchase_id = purchase.id
 
-            result = await full_purchase_flow(buy_client, item_id)
+            result = await full_purchase_flow(buy_client, item_id, account_info=account_info)
 
             async with AsyncSessionLocal() as db:
                 purchase = await db.get(Purchase, purchase_id)
