@@ -105,6 +105,20 @@ class BuyEngine:
                 await db.refresh(purchase)
                 purchase_id = purchase.id
 
+            # Verify the buy client has cookies (account must be authenticated)
+            if buy_client is not self.primary_client and not buy_client._cookies:
+                async with AsyncSessionLocal() as db:
+                    await self._log(db, "error",
+                        f"Autocop impossible: le compte n'a pas de cookies Vinted valides. "
+                        f"Ajoutez les cookies dans l'onglet Comptes.",
+                        "buy", user_id)
+                await self.ws.broadcast_buy_result(
+                    item_id=item_id, success=False,
+                    price=None, error="Compte Vinted non authentifié — ajoutez vos cookies dans Comptes",
+                    user_id=user_id,
+                )
+                return
+
             result = await full_purchase_flow(buy_client, item_id, account_info=account_info)
 
             async with AsyncSessionLocal() as db:
