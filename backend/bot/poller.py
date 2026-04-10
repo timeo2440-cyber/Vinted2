@@ -65,16 +65,44 @@ class ItemPoller:
             for row in result.scalars():
                 self.seen_ids[row] = None
 
-    async def _loop(self) -> None:
-        await self._log("info", "Initialisation de la session Vinted…", "poller")
+    async def _acquire_session(self) -> bool:
+        """
+        Try to obtain a valid Vinted session.
+        1. Fast path: curl_cffi (works on residential IPs)
+        2. Fallback: Playwright headless Chromium (works on datacenter IPs too)
+        Returns True if a session was obtained.
+        """
         csrf = await self.client.fetch_csrf_token()
         if csrf:
             await self._log("info", "Session Vinted initialisée (token CSRF obtenu).", "poller")
-        else:
-            await self._log("warn",
-                "Impossible d'obtenir le token CSRF. "
-                "Si le bot ne montre rien, collez des cookies Vinted valides dans Paramètres.",
-                "poller")
+            return True
+
+        # curl_cffi failed — try real browser (bypasses Cloudflare on datacenter IPs)
+        await self._log("info", "Lancement du navigateur automatique pour contourner Cloudflare…", "poller")
+        try:
+            from vinted.browser_auth import fetch_cookies_via_browser
+            from urllib.parse import unquote
+            cookies = await fetch_cookies_via_browser(self.client.base_url)
+            if cookies:
+                self.client.set_cookies(cookies)
+                csrf_raw = cookies.get("XSRF-TOKEN") or cookies.get("xsrf-token")
+                if csrf_raw:
+                    self.client.set_csrf_token(unquote(csrf_raw))
+                await self._log("info", "Session Vinted obtenue via navigateur automatique ✓", "poller")
+                return True
+        except Exception as e:
+            logger.warning(f"Browser auth error: {e}")
+
+        await self._log("warn", "Impossible d'initialiser la session Vinted. Nouvelle tentative dans 60s…", "poller")
+        return False
+
+    async def _loop(self) -> None:
+        await self._log("info", "Initialisation de la session Vinted…", "poller")
+        session_ok = await self._acquire_session()
+        if not session_ok:
+            # Retry session acquisition in background until it succeeds
+            await asyncio.sleep(60)
+            await self._acquire_session()
 
         while self.running:
             try:
@@ -84,22 +112,9 @@ class ItemPoller:
                 self._consecutive_errors = 0
             except VintedAuthError:
                 self._consecutive_errors += 1
-                # Session expirée — tenter de renouveler automatiquement (session anonyme suffit)
-                renewed = False
-                for attempt in range(5):
-                    wait = 10 * (attempt + 1)
-                    await asyncio.sleep(wait)
-                    try:
-                        csrf = await self.client.fetch_csrf_token()
-                        if csrf:
-                            await self._log("info", "Session Vinted renouvelée automatiquement.", "auth")
-                            self._consecutive_errors = 0
-                            renewed = True
-                            break
-                    except Exception:
-                        pass
+                await self._log("info", "Session expirée — renouvellement automatique…", "auth")
+                renewed = await self._acquire_session()
                 if not renewed:
-                    # Attendre et réessayer silencieusement au prochain cycle
                     await asyncio.sleep(60)
             except VintedRateLimitError as e:
                 self._consecutive_errors += 1
