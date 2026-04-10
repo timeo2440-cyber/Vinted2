@@ -24,48 +24,40 @@ class FilterEngine:
         if keywords and not self._match_keywords(item, keywords):
             return False
 
-        # Category check — match by ID, OR trust targeted fetch, OR skip if unknown
+        # Category check — match by ID, OR trust targeted fetch, else reject
         category_ids = self._parse_json_list(get("category_ids"))
         if category_ids:
             item_cat_id = item.get("category_id")
-            # Items tagged by poller as fetched specifically for these categories
             targeted_cat_ids = [str(c) for c in (item.get("_targeted_category_ids") or [])]
 
             if item_cat_id is not None and self._match_list(str(item_cat_id), [str(c) for c in category_ids]):
                 pass  # exact ID match
             elif targeted_cat_ids and set(str(c) for c in category_ids) & set(targeted_cat_ids):
-                pass  # item was fetched by Vinted with these category params — trust it
-            elif item_cat_id is not None:
-                return False  # has a category but it doesn't match
-            # else: no category_id info at all — skip check (can't determine)
+                pass  # fetched by Vinted with these category params — trust it
+            else:
+                return False  # no matching category info → reject
 
-        # Brand check — ID match, targeted-fetch trust, text fallback, or skip
+        # Brand check — ID match, targeted-fetch trust, text fallback, else reject
         brand_ids = self._parse_json_list(get("brand_ids"))
         if brand_ids:
             item_brand_id = str(item.get("brand_id") or "")
-            # Items tagged by poller as fetched specifically for these brands
             targeted_brand_ids = [str(b) for b in (item.get("_targeted_brand_ids") or [])]
 
             if item_brand_id and self._match_list(item_brand_id, [str(b) for b in brand_ids]):
                 pass  # exact numeric ID match
             elif targeted_brand_ids and set(str(b) for b in brand_ids) & set(targeted_brand_ids):
                 pass  # fetched by Vinted with these brand params — trust it
-            elif not item_brand_id:
-                # No brand_id — text fallback using stored brand names
-                brand_names = self._parse_json_list(get("brand_names"))
-                if brand_names:
-                    item_brand = (item.get("brand") or "").lower().strip()
-                    if item_brand:
-                        if not any(
-                            bn.lower() in item_brand or item_brand in bn.lower()
-                            for bn in brand_names if bn
-                        ):
-                            return False
-                    # no brand text at all → skip (can't determine)
-                # no brand_names stored → skip
             else:
-                # Has a brand_id but it doesn't match any filter brand
-                return False
+                # Last resort: text match against stored brand names
+                brand_names = self._parse_json_list(get("brand_names"))
+                item_brand = (item.get("brand") or "").lower().strip()
+                if brand_names and item_brand and any(
+                    bn.lower() in item_brand or item_brand in bn.lower()
+                    for bn in brand_names if bn
+                ):
+                    pass  # text match
+                else:
+                    return False  # no brand info matches → reject
 
         # Size check — match by numeric ID
         size_ids = self._parse_json_list(get("size_ids"))
