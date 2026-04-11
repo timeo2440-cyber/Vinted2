@@ -18,195 +18,7 @@ class PurchaseResult:
     error: Optional[str] = None
 
 
-# Keywords that identify relay/pickup shipping options
-_RELAY_KEYWORDS = ["relais", "relay", "pickup", "point", "mondial", "dpd", "locker", "retrait", "chronopost"]
-
-
-async def get_shipping_options(client: VintedClient, transaction_id: str) -> list[dict]:
-    """Get available shipping options for a transaction."""
-    try:
-        data = await client.get(f"/transactions/{transaction_id}/shipping_options")
-        return data.get("shipping_options") or data.get("options") or []
-    except Exception as e:
-        raise VintedCheckoutError(f"Failed to get shipping options: {e}") from e
-
-
-async def select_shipping(client: VintedClient, transaction_id: str, option_id: str) -> dict:
-    """Select a shipping option for a transaction."""
-    try:
-        return await client.patch(
-            f"/transactions/{transaction_id}",
-            json={"transaction": {"shipping_option_id": option_id}},
-        )
-    except Exception as e:
-        raise VintedCheckoutError(f"Failed to select shipping: {e}") from e
-
-
-async def get_payment_methods(client: VintedClient, transaction_id: str) -> list[dict]:
-    """Get available payment methods for a transaction."""
-    try:
-        data = await client.get(f"/transactions/{transaction_id}/payment_methods")
-        return data.get("payment_methods") or []
-    except Exception as e:
-        raise VintedCheckoutError(f"Failed to get payment methods: {e}") from e
-
-
-async def get_pickup_points(
-    client: VintedClient,
-    transaction_id: str,
-    postal_code: str = "",
-    country: str = "FR",
-) -> list[dict]:
-    """Get relay/pickup points near a postal code for a transaction."""
-    params: dict = {}
-    if postal_code:
-        params["postal_code"] = postal_code
-    if country:
-        params["country_code"] = country.upper()
-
-    # Try multiple possible Vinted endpoints for pickup points
-    endpoints = [
-        f"/transactions/{transaction_id}/pickup_points",
-        f"/transactions/{transaction_id}/shipping_options/pickup_points",
-        f"/pickup_points",
-    ]
-    for endpoint in endpoints:
-        try:
-            data = await client.get(endpoint, params=params)
-            points = data.get("pickup_points") or data.get("locations") or data.get("points") or []
-            if points:
-                return points
-        except Exception:
-            continue
-    return []
-
-
-async def _select_shipping_with_relay(
-    client: VintedClient,
-    transaction_id: str,
-    account_info: Optional[dict],
-) -> None:
-    """
-    Select shipping option, preferring a relay point if the account has an address.
-    Falls back to cheapest option if relay selection fails.
-    """
-    try:
-        options = await get_shipping_options(client, transaction_id)
-    except Exception:
-        return
-
-    if not options:
-        return
-
-    address = (account_info or {}).get("default_address") or {}
-    postal_code = str(address.get("postal_code") or address.get("zip") or "").strip()
-    country = str(address.get("country") or address.get("country_code") or "FR").upper()
-
-    # If account has an address, try to find a relay point option
-    if postal_code:
-        relay_option = None
-        for opt in options:
-            name = (
-                opt.get("title") or opt.get("name") or
-                opt.get("type") or opt.get("carrier") or ""
-            ).lower()
-            if any(kw in name for kw in _RELAY_KEYWORDS):
-                relay_option = opt
-                break
-
-        if relay_option:
-            try:
-                relay_id = str(relay_option.get("id", ""))
-                await select_shipping(client, transaction_id, relay_id)
-                logger.info(f"Relay shipping selected: {relay_option.get('title', relay_id)}")
-                await asyncio.sleep(0.3)
-
-                # Try to select a specific pickup point near the address
-                pickup_points = await get_pickup_points(
-                    client, transaction_id,
-                    postal_code=postal_code,
-                    country=country,
-                )
-                if pickup_points:
-                    nearest = pickup_points[0]
-                    point_id = nearest.get("id") or nearest.get("code") or nearest.get("external_id")
-                    if point_id:
-                        try:
-                            await client.patch(
-                                f"/transactions/{transaction_id}",
-                                json={"transaction": {"pickup_point_id": str(point_id)}},
-                            )
-                            logger.info(
-                                f"Pickup point selected: {nearest.get('name', point_id)} "
-                                f"({nearest.get('address', '')})"
-                            )
-                        except Exception as e:
-                            logger.warning(f"Could not select pickup point: {e}")
-                else:
-                    logger.info("No pickup points found near address — relay option kept without specific point")
-                return
-            except Exception as e:
-                logger.warning(f"Relay shipping selection failed: {e}, falling back to cheapest")
-
-    # Default: cheapest option
-    try:
-        def _price(o):
-            p = o.get("price")
-            if isinstance(p, dict):
-                return float(p.get("amount", 999) or 999)
-            return float(p or 999)
-
-        cheapest = min(options, key=_price)
-        await select_shipping(client, transaction_id, str(cheapest.get("id", "")))
-        logger.info(f"Cheapest shipping selected: {cheapest.get('title', '')} ({_price(cheapest)}€)")
-    except Exception as e:
-        logger.warning(f"Could not select cheapest shipping: {e}")
-
-
-def _find_best_payment_method(
-    methods: list[dict],
-    payment_card: Optional[dict],
-) -> Optional[str]:
-    """
-    Find the best payment method ID from the list.
-    Priority:
-    1. Card matching the stored payment_card (by last 4 digits)
-    2. Any card-type method
-    3. Wallet / balance
-    4. First available
-    """
-    if not methods:
-        return None
-
-    stored_last4 = ""
-    if payment_card and payment_card.get("number"):
-        stored_last4 = str(payment_card["number"]).replace(" ", "")[-4:]
-
-    # 1. Exact card match by last 4 digits
-    if stored_last4:
-        for m in methods:
-            last4 = str(m.get("last4") or m.get("last_four") or "")
-            if last4 == stored_last4:
-                logger.info(f"Matched stored card (last4={stored_last4}): {m.get('id')}")
-                return str(m.get("id", ""))
-
-    # 2. Any card-type method
-    for m in methods:
-        mtype = (m.get("type") or m.get("kind") or "").lower()
-        if any(k in mtype for k in ("card", "credit", "debit", "carte")):
-            logger.info(f"Using card method: {m.get('id')} ({m.get('type')})")
-            return str(m.get("id", ""))
-
-    # 3. Wallet / balance
-    for m in methods:
-        mtype = (m.get("type") or m.get("kind") or "").lower()
-        if any(k in mtype for k in ("wallet", "balance", "solde", "portefeuille")):
-            logger.info(f"Using wallet method: {m.get('id')}")
-            return str(m.get("id", ""))
-
-    # 4. First available
-    logger.info(f"Using first payment method: {methods[0].get('id')}")
-    return str(methods[0].get("id", ""))
+_RELAY_KEYWORDS = ["relais", "relay", "pickup", "point", "mondial", "dpd", "locker", "retrait", "chronopost", "bpost", "inpost"]
 
 
 async def full_purchase_flow(
@@ -216,68 +28,258 @@ async def full_purchase_flow(
 ) -> PurchaseResult:
     """
     Complete purchase flow:
-    1. Add to cart
-    2. Select shipping (relay point near address if available, else cheapest)
-    3. Select payment (stored card if available, else best available)
-    4. Finalize purchase
+    1. Add to cart → get transaction
+    2. Select shipping (relay point if address available, else cheapest)
+    3. Select payment (stored card or best available)
+    4. Finalize
     """
-    # Step 1: Add to cart / initiate transaction
+
+    # ── Step 1: Add to cart ────────────────────────────────────────────────────
     try:
         transaction = await add_to_cart(client, item_id)
     except VintedItemUnavailable as e:
         return PurchaseResult(success=False, item_id=item_id, error=str(e))
     except Exception as e:
-        return PurchaseResult(success=False, item_id=item_id, error=f"Cart error: {e}")
+        return PurchaseResult(success=False, item_id=item_id, error=f"Erreur panier: {e}")
 
     transaction_id = str(transaction.get("id", ""))
     if not transaction_id:
-        return PurchaseResult(success=False, item_id=item_id, error="No transaction ID returned")
+        return PurchaseResult(success=False, item_id=item_id, error="Pas d'ID de transaction")
 
-    await asyncio.sleep(0.3)
+    logger.info(f"Transaction créée: {transaction_id} pour article {item_id}")
+    logger.debug(f"Transaction data keys: {list(transaction.keys())}")
 
-    # Step 2: Select shipping (relay point if account has address, else cheapest)
-    await _select_shipping_with_relay(client, transaction_id, account_info)
+    await asyncio.sleep(0.5)
 
-    await asyncio.sleep(0.2)
+    # ── Step 2: Get shipping options (from transaction or dedicated endpoint) ──
+    address = (account_info or {}).get("default_address") or {}
+    postal_code = str(address.get("postal_code") or address.get("zip") or "").strip()
+    country = str(address.get("country") or address.get("country_code") or "FR").upper()
 
-    # Step 3: Get and select payment method
-    payment_method_id = None
-    try:
-        methods = await get_payment_methods(client, transaction_id)
-        payment_card = (account_info or {}).get("payment_card")
-        payment_method_id = _find_best_payment_method(methods, payment_card)
-    except Exception as e:
-        logger.warning(f"Could not get payment methods: {e}")
+    # Shipping options may be embedded in the transaction response
+    shipping_options = (
+        transaction.get("shipping_options") or
+        transaction.get("available_shipping_options") or
+        []
+    )
 
-    await asyncio.sleep(0.2)
+    if not shipping_options:
+        # Try dedicated endpoint
+        for endpoint in [
+            f"/transactions/{transaction_id}/shipping_options",
+            f"/transactions/{transaction_id}",
+        ]:
+            try:
+                data = await client.get(endpoint)
+                shipping_options = (
+                    data.get("shipping_options") or
+                    data.get("available_shipping_options") or
+                    (data.get("transaction") or {}).get("shipping_options") or
+                    []
+                )
+                if shipping_options:
+                    logger.info(f"Shipping options trouvées via {endpoint}: {len(shipping_options)}")
+                    break
+            except Exception as e:
+                logger.debug(f"Shipping endpoint {endpoint}: {e}")
 
-    # Step 4: Finalize
-    try:
-        payload: dict = {}
-        if payment_method_id:
-            payload["payment_method_id"] = payment_method_id
+    logger.info(f"Shipping options disponibles: {len(shipping_options)}")
+    for opt in shipping_options:
+        logger.info(f"  - [{opt.get('id')}] {opt.get('title') or opt.get('name')} — {opt.get('price')}")
 
-        result = await client.post(f"/transactions/{transaction_id}/finalize", json=payload)
+    # ── Step 3: Select shipping ────────────────────────────────────────────────
+    selected_shipping_id = None
 
-        price_paid = None
-        tx = result.get("transaction") or result
-        if isinstance(tx, dict):
-            p = tx.get("total_price") or tx.get("price")
+    if shipping_options:
+        relay_option = None
+        cheapest_option = None
+
+        # Find relay option if user has an address
+        if postal_code:
+            for opt in shipping_options:
+                name = (opt.get("title") or opt.get("name") or opt.get("type") or "").lower()
+                if any(kw in name for kw in _RELAY_KEYWORDS):
+                    relay_option = opt
+                    logger.info(f"Option relais trouvée: {opt.get('title')} (id={opt.get('id')})")
+                    break
+
+        # Find cheapest option as fallback
+        def _price(o):
+            p = o.get("price")
             if isinstance(p, dict):
-                price_paid = float(p.get("amount", 0))
-            elif p:
-                price_paid = float(p)
+                return float(p.get("amount", 999) or 999)
+            return float(p or 999)
 
-        return PurchaseResult(
-            success=True,
-            item_id=item_id,
-            transaction_id=transaction_id,
-            price_paid=price_paid,
-        )
-    except Exception as e:
-        return PurchaseResult(
-            success=False,
-            item_id=item_id,
-            transaction_id=transaction_id,
-            error=f"Finalize error: {e}",
-        )
+        try:
+            cheapest_option = min(shipping_options, key=_price)
+        except Exception:
+            cheapest_option = shipping_options[0]
+
+        chosen = relay_option or cheapest_option
+        selected_shipping_id = str(chosen.get("id", ""))
+        logger.info(f"Shipping choisi: {chosen.get('title')} (id={selected_shipping_id})")
+
+        try:
+            await client.patch(
+                f"/transactions/{transaction_id}",
+                json={"transaction": {"shipping_option_id": selected_shipping_id}},
+            )
+            logger.info("Shipping sélectionné ✓")
+        except Exception as e:
+            logger.warning(f"Erreur sélection shipping: {e}")
+
+        await asyncio.sleep(0.3)
+
+        # ── Step 3b: Select pickup point if relay ──────────────────────────────
+        if relay_option and postal_code:
+            pickup_points = []
+            for endpoint in [
+                f"/transactions/{transaction_id}/pickup_points",
+                f"/transactions/{transaction_id}/shipping_options/{selected_shipping_id}/pickup_points",
+                f"/pickup_points",
+            ]:
+                try:
+                    params = {"postal_code": postal_code, "country_code": country}
+                    data = await client.get(endpoint, params=params)
+                    pickup_points = (
+                        data.get("pickup_points") or
+                        data.get("locations") or
+                        data.get("points") or []
+                    )
+                    if pickup_points:
+                        logger.info(f"Points relais trouvés via {endpoint}: {len(pickup_points)}")
+                        break
+                except Exception as e:
+                    logger.debug(f"Pickup endpoint {endpoint}: {e}")
+
+            if pickup_points:
+                nearest = pickup_points[0]
+                point_id = nearest.get("id") or nearest.get("code") or nearest.get("external_id")
+                logger.info(f"Point relais sélectionné: {nearest.get('name')} — {nearest.get('address')} (id={point_id})")
+                if point_id:
+                    try:
+                        await client.patch(
+                            f"/transactions/{transaction_id}",
+                            json={"transaction": {"pickup_point_id": str(point_id)}},
+                        )
+                        logger.info("Point relais appliqué ✓")
+                    except Exception as e:
+                        logger.warning(f"Erreur sélection point relais: {e}")
+            else:
+                logger.info("Aucun point relais trouvé pour ce code postal — livraison relais sans point spécifique")
+
+    # ── Step 4: Get payment methods ────────────────────────────────────────────
+    await asyncio.sleep(0.3)
+    payment_method_id = None
+    payment_card = (account_info or {}).get("payment_card")
+
+    # Payment methods may be in the transaction
+    payment_methods = (
+        transaction.get("payment_methods") or
+        transaction.get("available_payment_methods") or
+        []
+    )
+
+    if not payment_methods:
+        for endpoint in [
+            f"/transactions/{transaction_id}/payment_methods",
+            f"/transactions/{transaction_id}",
+        ]:
+            try:
+                data = await client.get(endpoint)
+                payment_methods = (
+                    data.get("payment_methods") or
+                    data.get("available_payment_methods") or
+                    (data.get("transaction") or {}).get("payment_methods") or
+                    []
+                )
+                if payment_methods:
+                    logger.info(f"Payment methods via {endpoint}: {len(payment_methods)}")
+                    break
+            except Exception as e:
+                logger.debug(f"Payment endpoint {endpoint}: {e}")
+
+    logger.info(f"Méthodes de paiement disponibles: {len(payment_methods)}")
+    for m in payment_methods:
+        logger.info(f"  - [{m.get('id')}] type={m.get('type')} last4={m.get('last4')} brand={m.get('brand')}")
+
+    if payment_methods:
+        stored_last4 = ""
+        if payment_card and payment_card.get("number"):
+            stored_last4 = str(payment_card["number"]).replace(" ", "")[-4:]
+
+        # 1. Match by card last 4 digits
+        if stored_last4:
+            for m in payment_methods:
+                last4 = str(m.get("last4") or m.get("last_four") or "")
+                if last4 == stored_last4:
+                    payment_method_id = str(m.get("id", ""))
+                    logger.info(f"Carte correspondante trouvée (****{stored_last4}): {payment_method_id}")
+                    break
+
+        # 2. Any card type
+        if not payment_method_id:
+            for m in payment_methods:
+                mtype = (m.get("type") or m.get("kind") or "").lower()
+                if any(k in mtype for k in ("card", "credit", "debit", "carte")):
+                    payment_method_id = str(m.get("id", ""))
+                    logger.info(f"Carte disponible utilisée: {payment_method_id} ({m.get('type')})")
+                    break
+
+        # 3. Wallet
+        if not payment_method_id:
+            for m in payment_methods:
+                mtype = (m.get("type") or m.get("kind") or "").lower()
+                if any(k in mtype for k in ("wallet", "balance", "solde")):
+                    payment_method_id = str(m.get("id", ""))
+                    logger.info(f"Wallet utilisé: {payment_method_id}")
+                    break
+
+        # 4. First available
+        if not payment_method_id and payment_methods:
+            payment_method_id = str(payment_methods[0].get("id", ""))
+            logger.info(f"Première méthode utilisée: {payment_method_id}")
+
+    # ── Step 5: Finalize ───────────────────────────────────────────────────────
+    await asyncio.sleep(0.2)
+
+    finalize_endpoints = [
+        f"/transactions/{transaction_id}/finalize",
+        f"/transactions/{transaction_id}/confirm",
+        f"/transactions/{transaction_id}/buy",
+    ]
+
+    payload: dict = {}
+    if payment_method_id:
+        payload["payment_method_id"] = payment_method_id
+
+    for endpoint in finalize_endpoints:
+        try:
+            result = await client.post(endpoint, json=payload)
+            logger.info(f"Finalisation via {endpoint}: OK — keys={list(result.keys())}")
+
+            price_paid = None
+            tx = result.get("transaction") or result
+            if isinstance(tx, dict):
+                p = tx.get("total_price") or tx.get("price")
+                if isinstance(p, dict):
+                    price_paid = float(p.get("amount", 0))
+                elif p:
+                    price_paid = float(p)
+
+            return PurchaseResult(
+                success=True,
+                item_id=item_id,
+                transaction_id=transaction_id,
+                price_paid=price_paid,
+            )
+        except Exception as e:
+            logger.warning(f"Finalisation {endpoint} échouée: {e}")
+            continue
+
+    return PurchaseResult(
+        success=False,
+        item_id=item_id,
+        transaction_id=transaction_id,
+        error="Finalisation impossible — tous les endpoints ont échoué",
+    )
