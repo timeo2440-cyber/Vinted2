@@ -1,80 +1,15 @@
 """
 Playwright-based Vinted login.
-Logs into Vinted with email/password via a real headless Chromium browser,
-bypassing Cloudflare and 2FA challenges automatically.
+Combines Playwright (for Cloudflare bypass) with Vinted's JSON API
+to authenticate without scraping the DOM — much more reliable.
 """
 import asyncio
+import json
 import logging
 from typing import Optional
 from urllib.parse import unquote
 
 logger = logging.getLogger("vinted.browser_login")
-
-# Vinted login page selectors (multiple fallbacks for robustness)
-_EMAIL_SELECTORS = [
-    'input[data-testid="username"]',
-    'input[name="user[login]"]',
-    'input[id="username"]',
-    'input[name="username"]',
-    'input[type="email"]',
-    'input[placeholder*="mail" i]',
-    'input[placeholder*="email" i]',
-    'input[autocomplete="email"]',
-    'input[autocomplete="username"]',
-]
-_PASSWORD_SELECTORS = [
-    'input[data-testid="password"]',
-    'input[name="user[password]"]',
-    'input[id="password"]',
-    'input[name="password"]',
-    'input[type="password"]',
-    'input[placeholder*="mot de passe" i]',
-    'input[autocomplete="current-password"]',
-]
-_SUBMIT_SELECTORS = [
-    'button[data-testid="submit-button"]',
-    'button[data-testid="login-submit"]',
-    'button[type="submit"]',
-    'input[type="submit"]',
-]
-_COOKIE_CONSENT_SELECTORS = [
-    'button#onetrust-accept-btn-handler',
-    'button[data-testid="accept-all-cookies"]',
-    'button[id*="accept"]',
-    'button[class*="accept"]',
-    '[aria-label*="accepter" i]',
-    '[aria-label*="accept" i]',
-]
-_LOGIN_BUTTON_SELECTORS = [
-    'a[data-testid="header-login-button"]',
-    'a[href*="/login"]',
-    'button[data-testid="login"]',
-    '[data-testid="header--login"]',
-]
-
-
-async def _try_fill(page, selectors: list[str], value: str) -> bool:
-    for sel in selectors:
-        try:
-            el = page.locator(sel).first
-            if await el.count() > 0:
-                await el.fill(value)
-                return True
-        except Exception:
-            continue
-    return False
-
-
-async def _try_click(page, selectors: list[str]) -> bool:
-    for sel in selectors:
-        try:
-            el = page.locator(sel).first
-            if await el.count() > 0:
-                await el.click()
-                return True
-        except Exception:
-            continue
-    return False
 
 
 async def login_via_browser(
@@ -84,16 +19,21 @@ async def login_via_browser(
     timeout_ms: int = 60_000,
 ) -> dict:
     """
-    Log into Vinted using Playwright headless Chromium.
+    Log into Vinted using Playwright + Vinted's API.
+
+    Strategy:
+    1. Open Chromium to get valid Cloudflare session cookies
+    2. Use those cookies to call Vinted's login API (/api/v2/sessions)
+    3. Return the authenticated session cookies
 
     Returns:
         {
             "success": bool,
-            "cookies": dict,       # {name: value}
+            "cookies": dict,
             "csrf_token": str,
             "user_id": str,
             "username": str,
-            "error": str,          # set on failure
+            "error": str,
         }
     """
     try:
@@ -132,134 +72,117 @@ async def login_via_browser(
                 "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
             )
 
-            # 1. Load homepage first (get Cloudflare cookies)
+            # Step 1: Navigate to Vinted homepage to solve Cloudflare challenge
+            logger.info("Browser login: getting Cloudflare session…")
             await page.goto(base_url, wait_until="networkidle", timeout=timeout_ms)
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
 
-            # 2. Dismiss cookie consent banner if present
-            for sel in _COOKIE_CONSENT_SELECTORS:
-                try:
-                    el = page.locator(sel).first
-                    if await el.count() > 0:
-                        await el.click(timeout=3000)
-                        await asyncio.sleep(0.5)
-                        break
-                except Exception:
-                    continue
+            # Step 2: Get CSRF token from cookies
+            all_cookies = await context.cookies()
+            cookie_dict = {c["name"]: c["value"] for c in all_cookies}
+            csrf = unquote(cookie_dict.get("XSRF-TOKEN") or cookie_dict.get("xsrf-token") or "")
 
-            # 3. Navigate to login page (try multiple URLs)
-            login_urls = [
-                f"{base_url}/login",
-                f"{base_url}/fr/login",
-                f"{base_url}/member/login_form",
+            # Step 3: Try Vinted's login API endpoints
+            login_endpoints = [
+                f"{base_url}/api/v2/sessions",
+                f"{base_url}/api/v2/tokens",
             ]
-            for login_url in login_urls:
-                await page.goto(login_url, wait_until="networkidle", timeout=30_000)
-                await asyncio.sleep(1)
-                # Dismiss consent again if it appeared
-                for sel in _COOKIE_CONSENT_SELECTORS:
-                    try:
-                        el = page.locator(sel).first
-                        if await el.count() > 0:
-                            await el.click(timeout=2000)
-                            await asyncio.sleep(0.5)
-                        break
-                    except Exception:
-                        continue
-                if await _try_fill(page, _EMAIL_SELECTORS, email):
-                    break
-            else:
-                # Last resort: click login button from homepage
-                await page.goto(base_url, wait_until="networkidle", timeout=timeout_ms)
-                await asyncio.sleep(1)
-                await _try_click(page, _LOGIN_BUTTON_SELECTORS)
-                await asyncio.sleep(2)
+            login_bodies = [
+                json.dumps({"user": {"login": email, "password": password, "remember_me": "true"}}),
+                json.dumps({"username": email, "password": password}),
+            ]
 
-            # 4. Fill email
-            if not await _try_fill(page, _EMAIL_SELECTORS, email):
-                await browser.close()
-                return {"success": False, "error": "Champ email introuvable — vérifiez que l'URL de Vinted est correcte"}
-
-            await asyncio.sleep(0.3)
-
-            # 5. Fill password
-            if not await _try_fill(page, _PASSWORD_SELECTORS, password):
-                await browser.close()
-                return {"success": False, "error": "Champ mot de passe introuvable"}
-
-            await asyncio.sleep(0.3)
-
-            # 6. Submit
-            if not await _try_click(page, _SUBMIT_SELECTORS):
-                await page.keyboard.press("Enter")
-
-            # 7. Wait for navigation (login redirect)
-            try:
-                await page.wait_for_url(
-                    lambda url: "/login" not in url and "/member" not in url,
-                    timeout=15_000,
-                )
-            except Exception:
-                pass  # May already be on correct page
-
-            await asyncio.sleep(2)
-
-            # 7. Check for error message on page
-            current_url = page.url
-            if "/login" in current_url or "/member" in current_url:
-                # Still on login page — wrong credentials or blocked
-                error_text = ""
-                for sel in ['[class*="error"]', '[class*="alert"]', '[role="alert"]']:
-                    try:
-                        el = page.locator(sel).first
-                        if await el.count() > 0:
-                            error_text = await el.inner_text()
-                            break
-                    except Exception:
-                        pass
-                await browser.close()
-                return {
-                    "success": False,
-                    "error": f"Connexion échouée: {error_text or 'Email ou mot de passe incorrect'}",
-                }
-
-            # 8. Extract cookies
-            cookies = await context.cookies()
-            cookie_dict = {c["name"]: c["value"] for c in cookies}
-
-            # 9. Extract CSRF token
-            csrf = ""
-            for name in ("XSRF-TOKEN", "xsrf-token"):
-                if name in cookie_dict:
-                    csrf = unquote(cookie_dict[name])
-                    break
-
-            # 10. Try to get user info from the page or API
             user_id = ""
             username = ""
-            try:
-                resp = await context.request.get(
-                    f"{base_url}/api/v2/users/current_user",
-                    headers={"Accept": "application/json"},
-                )
-                if resp.ok:
-                    data = await resp.json()
-                    user = data.get("user", {})
-                    user_id = str(user.get("id", ""))
-                    username = user.get("login") or user.get("username") or ""
-            except Exception:
-                pass
+            api_success = False
+
+            for endpoint in login_endpoints:
+                for body in login_bodies:
+                    try:
+                        headers = {
+                            "Content-Type": "application/json",
+                            "Accept": "application/json, text/plain, */*",
+                            "X-CSRF-Token": csrf,
+                            "Referer": f"{base_url}/login",
+                            "Origin": base_url,
+                        }
+                        resp = await context.request.post(
+                            endpoint,
+                            data=body,
+                            headers=headers,
+                            timeout=30_000,
+                        )
+                        status = resp.status
+                        logger.info(f"Login API {endpoint}: status={status}")
+
+                        if status == 200 or status == 201:
+                            try:
+                                data = await resp.json()
+                                user = data.get("user", {})
+                                user_id = str(user.get("id", ""))
+                                username = user.get("login") or user.get("username") or ""
+                            except Exception:
+                                pass
+                            api_success = True
+                            break
+                        elif status == 401:
+                            # Wrong credentials
+                            await browser.close()
+                            return {"success": False, "error": "Email ou mot de passe incorrect"}
+                    except Exception as e:
+                        logger.debug(f"Login endpoint {endpoint} failed: {e}")
+                        continue
+
+                if api_success:
+                    break
+
+            if not api_success:
+                # Fallback: try DOM-based login
+                logger.info("API login failed, trying DOM login…")
+                dom_result = await _dom_login(page, context, base_url, email, password, timeout_ms)
+                if not dom_result:
+                    await browser.close()
+                    return {
+                        "success": False,
+                        "error": "Connexion échouée — vérifiez email/mot de passe et réessayez",
+                    }
+                user_id = dom_result.get("user_id", "")
+                username = dom_result.get("username", "")
+
+            # Step 4: Collect final cookies (includes session cookies set after login)
+            final_cookies = await context.cookies()
+            final_cookie_dict = {c["name"]: c["value"] for c in final_cookies}
+            final_csrf = unquote(
+                final_cookie_dict.get("XSRF-TOKEN") or
+                final_cookie_dict.get("xsrf-token") or csrf or ""
+            )
+
+            # Step 5: Try to get user info if we don't have it yet
+            if not user_id:
+                try:
+                    resp = await context.request.get(
+                        f"{base_url}/api/v2/users/current_user",
+                        headers={"Accept": "application/json"},
+                        timeout=15_000,
+                    )
+                    if resp.ok:
+                        data = await resp.json()
+                        user = data.get("user", {})
+                        user_id = str(user.get("id", ""))
+                        username = user.get("login") or user.get("username") or ""
+                except Exception:
+                    pass
 
             await browser.close()
 
             logger.info(
                 f"Browser login success: {email} → "
-                f"user={username or user_id}, cookies={len(cookie_dict)}"
+                f"user={username or user_id}, cookies={len(final_cookie_dict)}"
             )
             return {
                 "success": True,
-                "cookies": cookie_dict,
-                "csrf_token": csrf,
+                "cookies": final_cookie_dict,
+                "csrf_token": final_csrf,
                 "user_id": user_id,
                 "username": username,
                 "error": "",
@@ -268,3 +191,98 @@ async def login_via_browser(
     except Exception as e:
         logger.error(f"Browser login error for {email}: {e}")
         return {"success": False, "error": str(e)}
+
+
+async def _dom_login(page, context, base_url: str, email: str, password: str, timeout_ms: int) -> Optional[dict]:
+    """
+    Fallback: log in by interacting with the Vinted login page DOM.
+    """
+    email_selectors = [
+        'input[data-testid="username"]',
+        'input[name="user[login]"]',
+        'input[id="username"]',
+        'input[name="username"]',
+        'input[type="email"]',
+    ]
+    password_selectors = [
+        'input[data-testid="password"]',
+        'input[name="user[password]"]',
+        'input[id="password"]',
+        'input[name="password"]',
+        'input[type="password"]',
+    ]
+    submit_selectors = [
+        'button[data-testid="submit-button"]',
+        'button[data-testid="login-submit"]',
+        'button[type="submit"]',
+    ]
+    consent_selectors = [
+        'button#onetrust-accept-btn-handler',
+        'button[data-testid="accept-all-cookies"]',
+    ]
+
+    async def try_fill(selectors, value):
+        for sel in selectors:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.fill(value)
+                    return True
+            except Exception:
+                pass
+        return False
+
+    async def try_click(selectors):
+        for sel in selectors:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.click()
+                    return True
+            except Exception:
+                pass
+        return False
+
+    try:
+        # Dismiss consent
+        for sel in consent_selectors:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.click(timeout=2000)
+            except Exception:
+                pass
+
+        # Try login URLs
+        for url in [f"{base_url}/login", f"{base_url}/member/login_form"]:
+            await page.goto(url, wait_until="networkidle", timeout=30_000)
+            await asyncio.sleep(1)
+            if await try_fill(email_selectors, email):
+                break
+        else:
+            return None
+
+        await try_fill(password_selectors, password)
+        await asyncio.sleep(0.3)
+
+        if not await try_click(submit_selectors):
+            await page.keyboard.press("Enter")
+
+        try:
+            await page.wait_for_url(
+                lambda url: "/login" not in url and "/member" not in url,
+                timeout=15_000,
+            )
+        except Exception:
+            pass
+
+        await asyncio.sleep(2)
+        current_url = page.url
+        if "/login" in current_url or "/member" in current_url:
+            return None
+
+        return {"user_id": "", "username": ""}
+
+    except Exception as e:
+        logger.error(f"DOM login failed: {e}")
+        return None

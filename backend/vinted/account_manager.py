@@ -54,11 +54,8 @@ class AccountManager:
 
         if not result["success"]:
             logger.error(f"Account {account.email}: browser login failed — {result['error']}")
-            async with AsyncSessionLocal() as db:
-                acc = await db.get(Account, account.id)
-                if acc:
-                    acc.is_authenticated = False
-                    await db.commit()
+            # Ne pas marquer comme expiré — l'utilisateur peut corriger son mot de passe
+            # On garde is_authenticated=True pour ne pas bloquer l'interface
             return False
 
         # Save cookies to DB
