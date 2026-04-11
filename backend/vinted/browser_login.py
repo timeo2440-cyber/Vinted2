@@ -12,23 +12,44 @@ logger = logging.getLogger("vinted.browser_login")
 
 # Vinted login page selectors (multiple fallbacks for robustness)
 _EMAIL_SELECTORS = [
+    'input[data-testid="username"]',
     'input[name="user[login]"]',
     'input[id="username"]',
+    'input[name="username"]',
     'input[type="email"]',
     'input[placeholder*="mail" i]',
+    'input[placeholder*="email" i]',
     'input[autocomplete="email"]',
+    'input[autocomplete="username"]',
 ]
 _PASSWORD_SELECTORS = [
+    'input[data-testid="password"]',
     'input[name="user[password]"]',
     'input[id="password"]',
+    'input[name="password"]',
     'input[type="password"]',
     'input[placeholder*="mot de passe" i]',
     'input[autocomplete="current-password"]',
 ]
 _SUBMIT_SELECTORS = [
     'button[data-testid="submit-button"]',
+    'button[data-testid="login-submit"]',
     'button[type="submit"]',
     'input[type="submit"]',
+]
+_COOKIE_CONSENT_SELECTORS = [
+    'button#onetrust-accept-btn-handler',
+    'button[data-testid="accept-all-cookies"]',
+    'button[id*="accept"]',
+    'button[class*="accept"]',
+    '[aria-label*="accepter" i]',
+    '[aria-label*="accept" i]',
+]
+_LOGIN_BUTTON_SELECTORS = [
+    'a[data-testid="header-login-button"]',
+    'a[href*="/login"]',
+    'button[data-testid="login"]',
+    '[data-testid="header--login"]',
 ]
 
 
@@ -111,39 +132,68 @@ async def login_via_browser(
                 "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
             )
 
-            # 1. Load homepage first to get Cloudflare cookies
+            # 1. Load homepage first (get Cloudflare cookies)
             await page.goto(base_url, wait_until="networkidle", timeout=timeout_ms)
             await asyncio.sleep(2)
 
-            # 2. Navigate to login page
-            login_url = f"{base_url}/login"
-            await page.goto(login_url, wait_until="networkidle", timeout=timeout_ms)
-            await asyncio.sleep(1)
+            # 2. Dismiss cookie consent banner if present
+            for sel in _COOKIE_CONSENT_SELECTORS:
+                try:
+                    el = page.locator(sel).first
+                    if await el.count() > 0:
+                        await el.click(timeout=3000)
+                        await asyncio.sleep(0.5)
+                        break
+                except Exception:
+                    continue
 
-            # 3. Fill email
-            if not await _try_fill(page, _EMAIL_SELECTORS, email):
-                # Maybe login form is in a modal or different route
-                await page.goto(f"{base_url}/member/login_form", wait_until="networkidle", timeout=30_000)
+            # 3. Navigate to login page (try multiple URLs)
+            login_urls = [
+                f"{base_url}/login",
+                f"{base_url}/fr/login",
+                f"{base_url}/member/login_form",
+            ]
+            for login_url in login_urls:
+                await page.goto(login_url, wait_until="networkidle", timeout=30_000)
                 await asyncio.sleep(1)
-                if not await _try_fill(page, _EMAIL_SELECTORS, email):
-                    await browser.close()
-                    return {"success": False, "error": "Champ email introuvable sur la page de connexion"}
+                # Dismiss consent again if it appeared
+                for sel in _COOKIE_CONSENT_SELECTORS:
+                    try:
+                        el = page.locator(sel).first
+                        if await el.count() > 0:
+                            await el.click(timeout=2000)
+                            await asyncio.sleep(0.5)
+                        break
+                    except Exception:
+                        continue
+                if await _try_fill(page, _EMAIL_SELECTORS, email):
+                    break
+            else:
+                # Last resort: click login button from homepage
+                await page.goto(base_url, wait_until="networkidle", timeout=timeout_ms)
+                await asyncio.sleep(1)
+                await _try_click(page, _LOGIN_BUTTON_SELECTORS)
+                await asyncio.sleep(2)
+
+            # 4. Fill email
+            if not await _try_fill(page, _EMAIL_SELECTORS, email):
+                await browser.close()
+                return {"success": False, "error": "Champ email introuvable — vérifiez que l'URL de Vinted est correcte"}
 
             await asyncio.sleep(0.3)
 
-            # 4. Fill password
+            # 5. Fill password
             if not await _try_fill(page, _PASSWORD_SELECTORS, password):
                 await browser.close()
                 return {"success": False, "error": "Champ mot de passe introuvable"}
 
             await asyncio.sleep(0.3)
 
-            # 5. Submit
+            # 6. Submit
             if not await _try_click(page, _SUBMIT_SELECTORS):
-                # Fallback: press Enter
                 await page.keyboard.press("Enter")
 
-            # 6. Wait for navigation (login redirect)
+            # 7. Wait for navigation (login redirect)
             try:
                 await page.wait_for_url(
                     lambda url: "/login" not in url and "/member" not in url,
