@@ -105,19 +105,29 @@ class BuyEngine:
                 await db.refresh(purchase)
                 purchase_id = purchase.id
 
-            # Verify the buy client has cookies (account must be authenticated)
+            # Si le client n'a pas de cookies, tenter la connexion maintenant
             if buy_client is not self.primary_client and not buy_client._cookies:
-                async with AsyncSessionLocal() as db:
-                    await self._log(db, "error",
-                        f"Autocop impossible: le compte n'a pas de cookies Vinted valides. "
-                        f"Ajoutez les cookies dans l'onglet Comptes.",
-                        "buy", user_id)
-                await self.ws.broadcast_buy_result(
-                    item_id=item_id, success=False,
-                    price=None, error="Compte Vinted non authentifié — ajoutez vos cookies dans Comptes",
-                    user_id=user_id,
-                )
-                return
+                if self.account_manager and account_id:
+                    async with AsyncSessionLocal() as db:
+                        await self._log(db, "info",
+                            f"Connexion au compte Vinted avant achat…", "buy", user_id)
+                    ok = await self.account_manager.relogin_account(account_id)
+                    if ok.get("success"):
+                        # Récupérer le client mis à jour
+                        new_client = self.account_manager.get_client(account_id)
+                        if new_client:
+                            buy_client = new_client
+                    if not buy_client._cookies:
+                        async with AsyncSessionLocal() as db:
+                            await self._log(db, "error",
+                                "Connexion Vinted impossible — vérifiez email/mot de passe dans Comptes",
+                                "buy", user_id)
+                        await self.ws.broadcast_buy_result(
+                            item_id=item_id, success=False,
+                            price=None, error="Connexion Vinted échouée — vérifiez email/mot de passe",
+                            user_id=user_id,
+                        )
+                        return
 
             result = await full_purchase_flow(buy_client, item_id, account_info=account_info)
 

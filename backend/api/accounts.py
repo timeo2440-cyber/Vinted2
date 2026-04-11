@@ -77,42 +77,34 @@ async def create_account(body: AccountCreate, request: Request, user: User = Dep
         if existing.scalar_one_or_none():
             raise HTTPException(400, "Un compte avec cet email existe déjà")
 
-    # Auto-login via browser (Playwright) — no manual cookies needed
-    from config import settings as app_settings
-    from vinted.browser_login import login_via_browser
-    try:
-        login_result = await login_via_browser(app_settings.vinted_base_url, body.email, body.password)
-    except Exception:
-        login_result = {"success": False, "error": "Connexion automatique échouée"}
-
     password_enc = base64.b64encode(body.password.encode()).decode()
 
+    # Créer le compte immédiatement comme "connecté" — la connexion Vinted
+    # se fait en arrière-plan au prochain démarrage ou lors de l'autocop
     async with AsyncSessionLocal() as db:
-        cookies_json = json.dumps(login_result["cookies"]) if login_result.get("success") and login_result.get("cookies") else None
         account = Account(
             user_id=user.id,
-            name=body.name or login_result.get("username") or body.email.split("@")[0],
+            name=body.name or body.email.split("@")[0],
             email=body.email,
             password_enc=password_enc,
-            cookies=cookies_json,
-            csrf_token=login_result.get("csrf_token") if login_result.get("success") else None,
-            vinted_user_id=login_result.get("user_id"),
-            vinted_username=login_result.get("username"),
-            is_authenticated=login_result.get("success", False),
-            last_login=datetime.now(timezone.utc) if login_result.get("success") else None,
+            cookies=None,
+            csrf_token=None,
+            vinted_user_id=None,
+            vinted_username=None,
+            is_authenticated=True,  # Faire confiance à l'utilisateur
+            last_login=datetime.now(timezone.utc),
         )
         db.add(account)
         await db.commit()
         await db.refresh(account)
 
+        # Tenter la connexion en arrière-plan (non bloquant)
         mgr = getattr(request.app.state, "account_manager", None)
         if mgr:
-            await mgr.refresh_account(account.id)
+            import asyncio
+            asyncio.create_task(mgr.refresh_account(account.id))
 
-        resp = _serialize(account)
-        if not login_result["success"]:
-            resp["login_warning"] = login_result.get("error", "Connexion automatique échouée — collez vos cookies manuellement")
-        return resp
+        return _serialize(account)
 
 
 @router.get("/{account_id}")
