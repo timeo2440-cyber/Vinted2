@@ -77,28 +77,29 @@ async def create_account(body: AccountCreate, request: Request, user: User = Dep
         if existing.scalar_one_or_none():
             raise HTTPException(400, "Un compte avec cet email existe déjà")
 
-    # Try auto-login but don't block account creation if it fails (Cloudflare blocks it)
+    # Auto-login via browser (Playwright) — no manual cookies needed
     from config import settings as app_settings
+    from vinted.browser_login import login_via_browser
     try:
-        login_result = await login_with_credentials(app_settings.vinted_base_url, body.email, body.password)
+        login_result = await login_via_browser(app_settings.vinted_base_url, body.email, body.password)
     except Exception:
-        login_result = {"success": False, "error": "Connexion automatique échouée — collez vos cookies manuellement"}
+        login_result = {"success": False, "error": "Connexion automatique échouée"}
 
     password_enc = base64.b64encode(body.password.encode()).decode()
 
     async with AsyncSessionLocal() as db:
+        cookies_json = json.dumps(login_result["cookies"]) if login_result.get("success") and login_result.get("cookies") else None
         account = Account(
             user_id=user.id,
             name=body.name or login_result.get("username") or body.email.split("@")[0],
             email=body.email,
             password_enc=password_enc,
-            cookies=login_result.get("cookies") if login_result["success"] else None,
-            csrf_token=login_result.get("csrf_token") if login_result["success"] else None,
+            cookies=cookies_json,
+            csrf_token=login_result.get("csrf_token") if login_result.get("success") else None,
             vinted_user_id=login_result.get("user_id"),
             vinted_username=login_result.get("username"),
-            # Toujours marquer comme actif — l'utilisateur collera ses cookies si besoin
-            is_authenticated=True,
-            last_login=datetime.now(timezone.utc),
+            is_authenticated=login_result.get("success", False),
+            last_login=datetime.now(timezone.utc) if login_result.get("success") else None,
         )
         db.add(account)
         await db.commit()
@@ -181,11 +182,12 @@ async def relogin_account(account_id: int, request: Request, user: User = Depend
             raise HTTPException(400, "Mot de passe corrompu")
 
         from config import settings as app_settings
-        result = await login_with_credentials(app_settings.vinted_base_url, account.email, password)
+        from vinted.browser_login import login_via_browser
+        result = await login_via_browser(app_settings.vinted_base_url, account.email, password)
 
         account.is_authenticated = result["success"]
         if result["success"]:
-            account.cookies = result.get("cookies")
+            account.cookies = json.dumps(result["cookies"]) if result.get("cookies") else None
             account.csrf_token = result.get("csrf_token")
             account.vinted_user_id = result.get("user_id")
             account.vinted_username = result.get("username")
