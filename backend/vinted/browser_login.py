@@ -23,8 +23,9 @@ async def login_via_browser(
 
     Strategy:
     1. Open Chromium to get valid Cloudflare session cookies
-    2. Use those cookies to call Vinted's login API (/api/v2/sessions)
-    3. Return the authenticated session cookies
+    2. Try API login via browser context (has valid Cloudflare cookies)
+    3. Fall back to DOM-based login
+    4. Return the authenticated session cookies
 
     Returns:
         {
@@ -74,71 +75,31 @@ async def login_via_browser(
 
             # Step 1: Navigate to Vinted homepage to solve Cloudflare challenge
             logger.info("Browser login: getting Cloudflare session…")
-            await page.goto(base_url, wait_until="networkidle", timeout=timeout_ms)
+            try:
+                await page.goto(base_url, wait_until="networkidle", timeout=timeout_ms)
+            except Exception:
+                await page.goto(base_url, wait_until="domcontentloaded", timeout=timeout_ms)
             await asyncio.sleep(3)
 
             # Step 2: Get CSRF token from cookies
             all_cookies = await context.cookies()
             cookie_dict = {c["name"]: c["value"] for c in all_cookies}
             csrf = unquote(cookie_dict.get("XSRF-TOKEN") or cookie_dict.get("xsrf-token") or "")
+            logger.info(f"Initial cookies: {len(cookie_dict)}, csrf={'yes' if csrf else 'no'}")
 
-            # Step 3: Try Vinted's login API endpoints
-            login_endpoints = [
-                f"{base_url}/api/v2/sessions",
-                f"{base_url}/api/v2/tokens",
-            ]
-            login_bodies = [
-                json.dumps({"user": {"login": email, "password": password, "remember_me": "true"}}),
-                json.dumps({"username": email, "password": password}),
-            ]
-
+            # Step 3: Try API login via browser context (reuses Cloudflare cookies)
             user_id = ""
             username = ""
             api_success = False
 
-            for endpoint in login_endpoints:
-                for body in login_bodies:
-                    try:
-                        headers = {
-                            "Content-Type": "application/json",
-                            "Accept": "application/json, text/plain, */*",
-                            "X-CSRF-Token": csrf,
-                            "Referer": f"{base_url}/login",
-                            "Origin": base_url,
-                        }
-                        resp = await context.request.post(
-                            endpoint,
-                            data=body,
-                            headers=headers,
-                            timeout=30_000,
-                        )
-                        status = resp.status
-                        logger.info(f"Login API {endpoint}: status={status}")
+            if csrf:
+                api_success, user_id, username = await _api_login(
+                    context, base_url, email, password, csrf
+                )
 
-                        if status == 200 or status == 201:
-                            try:
-                                data = await resp.json()
-                                user = data.get("user", {})
-                                user_id = str(user.get("id", ""))
-                                username = user.get("login") or user.get("username") or ""
-                            except Exception:
-                                pass
-                            api_success = True
-                            break
-                        elif status == 401:
-                            # Wrong credentials
-                            await browser.close()
-                            return {"success": False, "error": "Email ou mot de passe incorrect"}
-                    except Exception as e:
-                        logger.debug(f"Login endpoint {endpoint} failed: {e}")
-                        continue
-
-                if api_success:
-                    break
-
+            # Step 4: Fall back to DOM login
             if not api_success:
-                # Fallback: try DOM-based login
-                logger.info("API login failed, trying DOM login…")
+                logger.info("Tentative de connexion via formulaire DOM…")
                 dom_result = await _dom_login(page, context, base_url, email, password, timeout_ms)
                 if not dom_result:
                     await browser.close()
@@ -149,7 +110,7 @@ async def login_via_browser(
                 user_id = dom_result.get("user_id", "")
                 username = dom_result.get("username", "")
 
-            # Step 4: Collect final cookies (includes session cookies set after login)
+            # Step 5: Collect final cookies (includes session cookies set after login)
             final_cookies = await context.cookies()
             final_cookie_dict = {c["name"]: c["value"] for c in final_cookies}
             final_csrf = unquote(
@@ -157,7 +118,7 @@ async def login_via_browser(
                 final_cookie_dict.get("xsrf-token") or csrf or ""
             )
 
-            # Step 5: Try to get user info if we don't have it yet
+            # Step 6: Try to get user info if we don't have it yet
             if not user_id:
                 try:
                     resp = await context.request.get(
@@ -170,8 +131,9 @@ async def login_via_browser(
                         user = data.get("user", {})
                         user_id = str(user.get("id", ""))
                         username = user.get("login") or user.get("username") or ""
-                except Exception:
-                    pass
+                        logger.info(f"User info from API: {username} (id={user_id})")
+                except Exception as e:
+                    logger.debug(f"current_user fetch: {e}")
 
             await browser.close()
 
@@ -193,81 +155,231 @@ async def login_via_browser(
         return {"success": False, "error": str(e)}
 
 
+async def _api_login(context, base_url: str, email: str, password: str, csrf: str) -> tuple:
+    """
+    Try API-based login using the browser context (which has Cloudflare cookies).
+    Returns (success: bool, user_id: str, username: str)
+    """
+    endpoints = [
+        ("/api/v2/users/login", {"login": email, "password": password}),
+        ("/api/v2/auth/sign_in", {"user": {"login": email, "password": password}}),
+        ("/api/v2/sessions", {"login": email, "password": password, "grant_type": "password"}),
+    ]
+
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf,
+        "X-App-Version": "web",
+        "Origin": base_url,
+        "Referer": f"{base_url}/login",
+    }
+
+    for path, payload in endpoints:
+        try:
+            resp = await context.request.post(
+                f"{base_url}{path}",
+                data=json.dumps(payload),
+                headers=headers,
+                timeout=15_000,
+            )
+            status = resp.status
+            logger.info(f"API login {path}: status={status}")
+
+            if status in (200, 201):
+                try:
+                    data = await resp.json()
+                    user = data.get("user") or data.get("data", {}).get("user") or {}
+                    if user and user.get("id"):
+                        user_id = str(user.get("id", ""))
+                        username = user.get("login") or user.get("username") or ""
+                        logger.info(f"API login success via {path}: {username} (id={user_id})")
+                        return True, user_id, username
+                except Exception as e:
+                    logger.debug(f"API login {path} parse error: {e}")
+
+            elif status in (401, 403, 422):
+                logger.warning(f"API login {path}: credentials rejected (HTTP {status})")
+                # Credentials wrong — no point trying DOM
+                return False, "", ""
+
+        except Exception as e:
+            logger.debug(f"API login {path} error: {e}")
+
+    return False, "", ""
+
+
 async def _dom_login(page, context, base_url: str, email: str, password: str, timeout_ms: int) -> Optional[dict]:
     """
-    Fallback: log in by interacting with the Vinted login page DOM.
+    Log in by interacting with the Vinted login page DOM.
+    React SPA compatible: uses type() with delays and dispatches synthetic events.
     """
     email_selectors = [
         'input[data-testid="username"]',
-        'input[name="user[login]"]',
-        'input[id="username"]',
         'input[name="username"]',
+        'input[id="username"]',
+        'input[name="user[login]"]',
+        'input[data-testid="login-form-username"]',
+        'input[autocomplete="username"]',
+        'input[autocomplete="email"]',
         'input[type="email"]',
+        '[class*="login"] input[type="text"]',
     ]
     password_selectors = [
         'input[data-testid="password"]',
-        'input[name="user[password]"]',
-        'input[id="password"]',
         'input[name="password"]',
+        'input[id="password"]',
+        'input[name="user[password]"]',
+        'input[data-testid="login-form-password"]',
+        'input[autocomplete="current-password"]',
         'input[type="password"]',
     ]
     submit_selectors = [
         'button[data-testid="submit-button"]',
         'button[data-testid="login-submit"]',
+        'button[data-testid="login-form-submit"]',
         'button[type="submit"]',
+        'button:text("Connexion")',
+        'button:text("Se connecter")',
     ]
     consent_selectors = [
         'button#onetrust-accept-btn-handler',
         'button[data-testid="accept-all-cookies"]',
+        'button[id*="accept"][id*="cookie"]',
     ]
 
-    async def try_fill(selectors, value):
-        for sel in selectors:
-            try:
-                el = page.locator(sel).first
-                if await el.count() > 0:
-                    await el.fill(value)
-                    return True
-            except Exception:
-                pass
-        return False
-
-    async def try_click(selectors):
-        for sel in selectors:
-            try:
-                el = page.locator(sel).first
-                if await el.count() > 0:
-                    await el.click()
-                    return True
-            except Exception:
-                pass
-        return False
-
-    try:
-        # Dismiss consent
+    async def dismiss_consent():
         for sel in consent_selectors:
             try:
                 el = page.locator(sel).first
                 if await el.count() > 0:
-                    await el.click(timeout=2000)
+                    await el.click(timeout=3000)
+                    await asyncio.sleep(0.5)
+                    logger.debug(f"Consent dismissed via {sel}")
+                    break
             except Exception:
                 pass
 
-        # Try login URLs
+    async def wait_and_fill(selector: str, value: str, field_name: str) -> bool:
+        """Wait for a field, then fill it using React-compatible typing."""
+        try:
+            el = page.locator(selector).first
+            count = await el.count()
+            if not count:
+                return False
+
+            # Click to focus the element
+            await el.click(timeout=5000)
+            await asyncio.sleep(0.2)
+
+            # Select all existing text and delete it
+            await page.keyboard.press("Control+a")
+            await asyncio.sleep(0.1)
+            await page.keyboard.press("Delete")
+            await asyncio.sleep(0.1)
+
+            # Type character by character — triggers React onChange events
+            await el.type(value, delay=40)
+            await asyncio.sleep(0.3)
+
+            # Also dispatch React synthetic events via JavaScript as insurance
+            await page.evaluate(
+                """([sel, val]) => {
+                    const el = document.querySelector(sel);
+                    if (!el) return;
+                    try {
+                        const setter = Object.getOwnPropertyDescriptor(
+                            window.HTMLInputElement.prototype, 'value'
+                        ).set;
+                        setter.call(el, val);
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                        el.dispatchEvent(new KeyboardEvent('keyup', {bubbles: true}));
+                    } catch(e) {}
+                }""",
+                [selector, value],
+            )
+
+            logger.info(f"{field_name} filled via {selector}")
+            return True
+        except Exception as e:
+            logger.debug(f"wait_and_fill({selector}): {e}")
+            return False
+
+    try:
+        # Try two login URLs
+        email_filled = False
         for url in [f"{base_url}/login", f"{base_url}/member/login_form"]:
-            await page.goto(url, wait_until="networkidle", timeout=30_000)
+            try:
+                await page.goto(url, wait_until="networkidle", timeout=30_000)
+            except Exception:
+                try:
+                    await page.goto(url, wait_until="domcontentloaded", timeout=20_000)
+                except Exception as e:
+                    logger.debug(f"goto {url}: {e}")
+                    continue
+
+            await asyncio.sleep(2)
+            await dismiss_consent()
             await asyncio.sleep(1)
-            if await try_fill(email_selectors, email):
+
+            # Wait up to 10s for any email selector
+            for sel in email_selectors:
+                try:
+                    await page.wait_for_selector(sel, timeout=5000)
+                    logger.info(f"Email field found: {sel}")
+                    if await wait_and_fill(sel, email, "Email"):
+                        email_filled = True
+                        break
+                except Exception:
+                    pass
+
+            if email_filled:
                 break
-        else:
+
+        if not email_filled:
+            logger.error("Email field not found or could not be filled on any login URL")
             return None
 
-        await try_fill(password_selectors, password)
-        await asyncio.sleep(0.3)
+        await asyncio.sleep(0.5)
 
-        if not await try_click(submit_selectors):
+        # Fill password
+        password_filled = False
+        for sel in password_selectors:
+            try:
+                if await page.locator(sel).count() > 0:
+                    if await wait_and_fill(sel, password, "Password"):
+                        password_filled = True
+                        break
+            except Exception:
+                pass
+
+        if not password_filled:
+            logger.warning("Password field not found — trying keyboard Tab")
+            await page.keyboard.press("Tab")
+            await asyncio.sleep(0.3)
+            await page.keyboard.type(password, delay=40)
+
+        await asyncio.sleep(0.5)
+
+        # Submit the form
+        submitted = False
+        for sel in submit_selectors:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.click(timeout=5000)
+                    submitted = True
+                    logger.info(f"Form submitted via {sel}")
+                    break
+            except Exception:
+                pass
+
+        if not submitted:
+            logger.warning("Submit button not found — pressing Enter")
             await page.keyboard.press("Enter")
 
+        # Wait for navigation away from login page
         try:
             await page.wait_for_url(
                 lambda url: "/login" not in url and "/member" not in url,
@@ -278,7 +390,10 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
 
         await asyncio.sleep(2)
         current_url = page.url
+        logger.info(f"After login, URL: {current_url}")
+
         if "/login" in current_url or "/member" in current_url:
+            logger.error("Still on login page — credentials wrong or form submission failed")
             return None
 
         return {"user_id": "", "username": ""}
