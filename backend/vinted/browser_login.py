@@ -224,58 +224,36 @@ async def _api_login(context, base_url: str, email: str, password: str, csrf: st
 async def _dom_login(page, context, base_url: str, email: str, password: str, timeout_ms: int) -> Optional[dict]:
     """
     Log in by interacting with the Vinted login page DOM.
-    Logs all inputs found for debugging, uses type-based fallback selection.
+    Strategy: click the login button FROM the homepage (already loaded with CF cookies)
+    rather than navigating directly to /login (which shows 0 inputs from datacenter IPs).
     """
-    # Known selectors (tried in order)
-    email_selectors = [
-        'input[data-testid="username"]',
-        'input[data-testid="Username"]',
-        'input[data-testid="login-form-username"]',
-        'input[name="username"]',
-        'input[name="user[login]"]',
-        'input[id="username"]',
-        'input[autocomplete="username"]',
-        'input[autocomplete="email"]',
-        'input[type="email"]',
-    ]
-    password_selectors = [
-        'input[data-testid="password"]',
-        'input[data-testid="Password"]',
-        'input[data-testid="login-form-password"]',
-        'input[name="password"]',
-        'input[name="user[password]"]',
-        'input[id="password"]',
-        'input[autocomplete="current-password"]',
-        'input[type="password"]',
-    ]
     submit_selectors = [
         'button[data-testid="submit-button"]',
         'button[data-testid="login-submit"]',
         'button[data-testid="login-form-submit"]',
         'button[type="submit"]',
     ]
-    consent_selectors = [
-        'button#onetrust-accept-btn-handler',
-        'button[data-testid="accept-all-cookies"]',
-    ]
 
     async def dismiss_consent():
-        for sel in consent_selectors:
+        for sel in [
+            'button#onetrust-accept-btn-handler',
+            'button[data-testid="accept-all-cookies"]',
+        ]:
             try:
                 el = page.locator(sel).first
                 if await el.count() > 0:
                     await el.click(timeout=3000)
                     await asyncio.sleep(0.5)
-                    logger.debug(f"Cookie consent dismissed via {sel}")
                     break
             except Exception:
                 pass
 
-    async def log_all_inputs():
-        """Log all inputs on the page to help debug selector issues."""
+    async def log_all_inputs(label=""):
+        """Log all inputs on the current page."""
         try:
             count = await page.locator('input').count()
-            logger.info(f"DEBUG: {count} inputs found on page (url={page.url})")
+            html_len = len(await page.content())
+            logger.info(f"DEBUG{' ' + label if label else ''}: {count} inputs, HTML={html_len}b, url={page.url}")
             for i in range(min(count, 12)):
                 try:
                     info = await page.locator('input').nth(i).evaluate("""(e) => ({
@@ -295,8 +273,19 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
         except Exception as e:
             logger.debug(f"log_all_inputs: {e}")
 
+    async def wait_for_any_input(timeout_s: int = 15) -> bool:
+        """Wait until at least one input appears on the page."""
+        for _ in range(timeout_s * 2):
+            try:
+                if await page.locator('input').count() > 0:
+                    return True
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+        return False
+
     async def fill_input(locator, value: str, field: str) -> bool:
-        """Fill a React input using type() + synthetic events."""
+        """Fill a React input: click → select all → type + dispatch events."""
         try:
             await locator.scroll_into_view_if_needed()
             await locator.click(timeout=5000)
@@ -307,7 +296,6 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
             await asyncio.sleep(0.1)
             await locator.type(value, delay=40)
             await asyncio.sleep(0.2)
-            # Dispatch React synthetic events
             try:
                 await locator.evaluate("""(el, val) => {
                     const setter = Object.getOwnPropertyDescriptor(
@@ -324,8 +312,7 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
             logger.debug(f"fill_input({field}): {e}")
             return False
 
-    async def find_input_by_selectors(selectors: list) -> Optional[object]:
-        """Try selectors in order, return first matching locator."""
+    async def find_input(selectors: list, fallback_type: str = "") -> Optional[object]:
         for sel in selectors:
             try:
                 loc = page.locator(sel).first
@@ -333,36 +320,123 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
                     return loc
             except Exception:
                 pass
-        return None
-
-    async def find_input_by_type(input_type: str) -> Optional[object]:
-        """Fallback: find any visible input of the given type."""
-        try:
-            loc = page.locator(f'input[type="{input_type}"]').first
-            if await loc.count() > 0:
-                return loc
-        except Exception:
-            pass
-        return None
-
-    async def find_first_text_input() -> Optional[object]:
-        """Fallback: find first visible text-like input (not password/hidden)."""
-        try:
-            inputs = page.locator('input:not([type="hidden"]):not([type="password"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"])')
-            for i in range(await inputs.count()):
-                el = inputs.nth(i)
+        if fallback_type:
+            try:
+                loc = page.locator(f'input[type="{fallback_type}"]').first
+                if await loc.count() > 0:
+                    return loc
+            except Exception:
+                pass
+            # Last resort: any visible non-special input
+            if fallback_type != "password":
                 try:
-                    if await el.is_visible():
-                        return el
+                    inputs = page.locator(
+                        'input:not([type="hidden"]):not([type="password"])'
+                        ':not([type="checkbox"]):not([type="radio"]):not([type="submit"])'
+                    )
+                    for i in range(await inputs.count()):
+                        el = inputs.nth(i)
+                        if await el.is_visible():
+                            return el
                 except Exception:
                     pass
-        except Exception:
-            pass
         return None
 
+    email_selectors = [
+        'input[data-testid="username"]',
+        'input[data-testid="Username"]',
+        'input[name="username"]',
+        'input[id="username"]',
+        'input[autocomplete="username"]',
+        'input[autocomplete="email"]',
+        'input[type="email"]',
+        'input[name="user[login]"]',
+    ]
+    password_selectors = [
+        'input[data-testid="password"]',
+        'input[data-testid="Password"]',
+        'input[name="password"]',
+        'input[id="password"]',
+        'input[autocomplete="current-password"]',
+        'input[type="password"]',
+        'input[name="user[password]"]',
+    ]
+
     try:
-        # Try two login URLs
-        email_found = False
+        # ── Strategy 1: click the login button from the homepage (already loaded) ──
+        # This avoids navigating directly to /login which shows 0 inputs from DC IPs
+        logger.info("DOM login: trying to click login button from homepage…")
+        await dismiss_consent()
+        await asyncio.sleep(1)
+
+        login_btn_selectors = [
+            'a[data-testid="header--loginLink"]',
+            'a[data-testid="login-link"]',
+            'button[data-testid="login-button"]',
+            f'a[href="/login"]',
+            f'a[href*="/login"]',
+            'button:has-text("Se connecter")',
+            'a:has-text("Se connecter")',
+            '[class*="Header"] a[href*="login"]',
+        ]
+        clicked_login = False
+        for sel in login_btn_selectors:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0 and await el.is_visible():
+                    await el.click(timeout=5000)
+                    logger.info(f"Clicked login button via {sel}")
+                    clicked_login = True
+                    break
+            except Exception:
+                pass
+
+        if clicked_login:
+            # Wait for form inputs to appear (SPA modal or page transition)
+            appeared = await wait_for_any_input(timeout_s=10)
+            await asyncio.sleep(1)
+            await log_all_inputs("after-click")
+
+            if appeared:
+                email_loc = await find_input(email_selectors, fallback_type="email")
+                if email_loc and await fill_input(email_loc, email, "Email"):
+                    pwd_loc = await find_input(password_selectors, fallback_type="password")
+                    if pwd_loc:
+                        await fill_input(pwd_loc, password, "Password")
+                    else:
+                        await page.keyboard.press("Tab")
+                        await asyncio.sleep(0.3)
+                        await page.keyboard.type(password, delay=40)
+                    await asyncio.sleep(0.5)
+                    # Submit
+                    submitted = False
+                    for sel in submit_selectors:
+                        try:
+                            el = page.locator(sel).first
+                            if await el.count() > 0:
+                                await el.click(timeout=5000)
+                                submitted = True
+                                break
+                        except Exception:
+                            pass
+                    if not submitted:
+                        await page.keyboard.press("Enter")
+                    try:
+                        await page.wait_for_url(
+                            lambda u: "/login" not in u and "/member" not in u,
+                            timeout=15_000,
+                        )
+                    except Exception:
+                        pass
+                    await asyncio.sleep(2)
+                    current_url = page.url
+                    logger.info(f"After login (strategy 1), URL: {current_url}")
+                    if "/login" not in current_url and "/member" not in current_url:
+                        return {"user_id": "", "username": ""}
+                    logger.warning("Strategy 1 failed — trying direct navigation")
+
+        # ── Strategy 2: navigate directly to /login, wait longer for React ──
+        logger.info("DOM login: direct navigation to /login with extended wait…")
         for url in [f"{base_url}/login", f"{base_url}/member/login_form"]:
             try:
                 await page.goto(url, wait_until="networkidle", timeout=30_000)
@@ -373,84 +447,63 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
                     logger.debug(f"goto {url}: {e}")
                     continue
 
-            await asyncio.sleep(3)
+            # Wait up to 15s for React to render inputs
+            appeared = await wait_for_any_input(timeout_s=15)
             await dismiss_consent()
             await asyncio.sleep(1)
+            await log_all_inputs(f"direct-{url.split('/')[-1]}")
 
-            # Log all inputs for debugging
-            await log_all_inputs()
+            if not appeared:
+                logger.warning(f"No inputs appeared at {url}")
+                continue
 
-            # Try known selectors first
-            email_loc = await find_input_by_selectors(email_selectors)
-
-            # Fallback: find by type
+            email_loc = await find_input(email_selectors, fallback_type="email")
             if not email_loc:
-                logger.info("Known selectors failed — trying type-based fallback")
-                email_loc = await find_input_by_type("email") or await find_first_text_input()
+                logger.warning(f"No email input at {url}")
+                continue
 
-            if email_loc:
-                if await fill_input(email_loc, email, "Email"):
-                    email_found = True
-                    break
+            if not await fill_input(email_loc, email, "Email"):
+                continue
+
+            await asyncio.sleep(0.5)
+            pwd_loc = await find_input(password_selectors, fallback_type="password")
+            if pwd_loc:
+                await fill_input(pwd_loc, password, "Password")
             else:
-                logger.warning(f"No email input found at {url}")
+                await page.keyboard.press("Tab")
+                await asyncio.sleep(0.3)
+                await page.keyboard.type(password, delay=40)
 
-        if not email_found:
-            logger.error("Email field not found or could not be filled on any login URL")
-            return None
+            await asyncio.sleep(0.5)
+            submitted = False
+            for sel in submit_selectors:
+                try:
+                    el = page.locator(sel).first
+                    if await el.count() > 0:
+                        await el.click(timeout=5000)
+                        submitted = True
+                        break
+                except Exception:
+                    pass
+            if not submitted:
+                await page.keyboard.press("Enter")
 
-        await asyncio.sleep(0.5)
-
-        # Fill password
-        password_loc = await find_input_by_selectors(password_selectors)
-        if not password_loc:
-            password_loc = await find_input_by_type("password")
-
-        if password_loc:
-            await fill_input(password_loc, password, "Password")
-        else:
-            logger.warning("Password field not found — Tab + type fallback")
-            await page.keyboard.press("Tab")
-            await asyncio.sleep(0.3)
-            await page.keyboard.type(password, delay=40)
-
-        await asyncio.sleep(0.5)
-
-        # Submit
-        submitted = False
-        for sel in submit_selectors:
             try:
-                el = page.locator(sel).first
-                if await el.count() > 0:
-                    await el.click(timeout=5000)
-                    submitted = True
-                    logger.info(f"Form submitted via {sel}")
-                    break
+                await page.wait_for_url(
+                    lambda u: "/login" not in u and "/member" not in u,
+                    timeout=15_000,
+                )
             except Exception:
                 pass
 
-        if not submitted:
-            logger.warning("Submit button not found — pressing Enter")
-            await page.keyboard.press("Enter")
+            await asyncio.sleep(2)
+            current_url = page.url
+            logger.info(f"After login (strategy 2), URL: {current_url}")
+            if "/login" not in current_url and "/member" not in current_url:
+                return {"user_id": "", "username": ""}
 
-        # Wait for navigation away from login page
-        try:
-            await page.wait_for_url(
-                lambda url: "/login" not in url and "/member" not in url,
-                timeout=15_000,
-            )
-        except Exception:
-            pass
-
-        await asyncio.sleep(2)
-        current_url = page.url
-        logger.info(f"After login, URL: {current_url}")
-
-        if "/login" in current_url or "/member" in current_url:
-            logger.error("Still on login page — credentials wrong or form submission failed")
-            return None
-
-        return {"user_id": "", "username": ""}
+        logger.error("Both DOM login strategies failed")
+        return None
 
     except Exception as e:
         logger.error(f"DOM login failed: {e}")
