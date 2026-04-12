@@ -327,12 +327,13 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
                     return loc
             except Exception:
                 pass
-            # Last resort: any visible non-special input
+            # Last resort: any visible non-special input — EXCLUDE search bars
             if fallback_type != "password":
                 try:
                     inputs = page.locator(
                         'input:not([type="hidden"]):not([type="password"])'
                         ':not([type="checkbox"]):not([type="radio"]):not([type="submit"])'
+                        ':not([name="search_text"]):not([id*="search"]):not([name*="search"])'
                     )
                     for i in range(await inputs.count()):
                         el = inputs.nth(i)
@@ -394,30 +395,21 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
         if clicked_login:
             await asyncio.sleep(2)
 
-            # Vinted may redirect to signup/select_type page — click "already have account"
-            if "signup" in page.url or "select_type" in page.url:
-                logger.info(f"On select_type page — looking for login link…")
-                already_have_account_selectors = [
-                    'a:has-text("J\'ai déjà un compte")',
-                    'a:has-text("Se connecter")',
-                    'button:has-text("Se connecter")',
-                    'a:has-text("Connexion")',
-                    'a[href*="/login"]',
-                    '[data-testid*="login"]',
-                ]
-                for sel in already_have_account_selectors:
+            # Vinted redirects to signup/select_type — now navigate directly to /login
+            # (we have proper CF cookies from all the navigation so far)
+            if "signup" in page.url or "select_type" in page.url or "/login" not in page.url:
+                logger.info(f"On {page.url} — navigating directly to /login with CF cookies…")
+                try:
+                    await page.goto(f"{base_url}/login", wait_until="networkidle", timeout=25_000)
+                except Exception:
                     try:
-                        el = page.locator(sel).first
-                        if await el.count() > 0 and await el.is_visible():
-                            await el.click(timeout=5000)
-                            logger.info(f"Clicked 'already have account' via {sel}")
-                            await asyncio.sleep(2)
-                            break
-                    except Exception:
-                        pass
+                        await page.goto(f"{base_url}/login", wait_until="domcontentloaded", timeout=20_000)
+                    except Exception as e:
+                        logger.debug(f"goto /login after CF: {e}")
+                await asyncio.sleep(3)
 
-            # Wait for form inputs to appear (SPA modal or page transition)
-            appeared = await wait_for_any_input(timeout_s=10)
+            # Wait for form inputs to appear
+            appeared = await wait_for_any_input(timeout_s=15)
             await asyncio.sleep(1)
             await log_all_inputs("after-click")
 
