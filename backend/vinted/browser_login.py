@@ -392,6 +392,30 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
                 pass
 
         if clicked_login:
+            await asyncio.sleep(2)
+
+            # Vinted may redirect to signup/select_type page — click "already have account"
+            if "signup" in page.url or "select_type" in page.url:
+                logger.info(f"On select_type page — looking for login link…")
+                already_have_account_selectors = [
+                    'a:has-text("J\'ai déjà un compte")',
+                    'a:has-text("Se connecter")',
+                    'button:has-text("Se connecter")',
+                    'a:has-text("Connexion")',
+                    'a[href*="/login"]',
+                    '[data-testid*="login"]',
+                ]
+                for sel in already_have_account_selectors:
+                    try:
+                        el = page.locator(sel).first
+                        if await el.count() > 0 and await el.is_visible():
+                            await el.click(timeout=5000)
+                            logger.info(f"Clicked 'already have account' via {sel}")
+                            await asyncio.sleep(2)
+                            break
+                    except Exception:
+                        pass
+
             # Wait for form inputs to appear (SPA modal or page transition)
             appeared = await wait_for_any_input(timeout_s=10)
             await asyncio.sleep(1)
