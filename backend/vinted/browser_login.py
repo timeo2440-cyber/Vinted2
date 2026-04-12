@@ -19,23 +19,12 @@ async def login_via_browser(
     timeout_ms: int = 60_000,
 ) -> dict:
     """
-    Log into Vinted using Playwright + Vinted's API.
+    Log into Vinted using Playwright.
 
     Strategy:
-    1. Open Chromium to get valid Cloudflare session cookies
-    2. Try API login via browser context (has valid Cloudflare cookies)
-    3. Fall back to DOM-based login
-    4. Return the authenticated session cookies
-
-    Returns:
-        {
-            "success": bool,
-            "cookies": dict,
-            "csrf_token": str,
-            "user_id": str,
-            "username": str,
-            "error": str,
-        }
+    1. Open Chromium → get Cloudflare session cookies
+    2. Try API login via browser context (uses Cloudflare cookies)
+    3. Fall back to DOM login (logs all inputs found for debugging)
     """
     try:
         from playwright.async_api import async_playwright
@@ -81,25 +70,45 @@ async def login_via_browser(
                 await page.goto(base_url, wait_until="domcontentloaded", timeout=timeout_ms)
             await asyncio.sleep(3)
 
-            # Step 2: Get CSRF token from cookies
+            # Step 2: Get CSRF from cookies AND from page HTML
             all_cookies = await context.cookies()
             cookie_dict = {c["name"]: c["value"] for c in all_cookies}
             csrf = unquote(cookie_dict.get("XSRF-TOKEN") or cookie_dict.get("xsrf-token") or "")
+
+            # Try to extract CSRF from page meta tag or JS state
+            if not csrf:
+                try:
+                    csrf_from_page = await page.evaluate("""
+                        () => {
+                            const meta = document.querySelector('meta[name="csrf-token"]');
+                            if (meta) return meta.getAttribute('content') || '';
+                            try {
+                                return window.__INITIAL_STATE__?.csrfToken ||
+                                       window.gon?.current_user_id && document.cookie.match(/XSRF-TOKEN=([^;]+)/)?.[1] ||
+                                       '';
+                            } catch(e) { return ''; }
+                        }
+                    """)
+                    if csrf_from_page:
+                        csrf = csrf_from_page
+                        logger.info("CSRF extracted from page HTML")
+                except Exception:
+                    pass
+
             logger.info(f"Initial cookies: {len(cookie_dict)}, csrf={'yes' if csrf else 'no'}")
 
-            # Step 3: Try API login via browser context (reuses Cloudflare cookies)
+            # Step 3: Try API login via browser context
             user_id = ""
             username = ""
             api_success = False
 
-            if csrf:
-                api_success, user_id, username = await _api_login(
-                    context, base_url, email, password, csrf
-                )
+            api_success, user_id, username = await _api_login(
+                context, base_url, email, password, csrf
+            )
 
             # Step 4: Fall back to DOM login
             if not api_success:
-                logger.info("Tentative de connexion via formulaire DOM…")
+                logger.info("API login failed — trying DOM login…")
                 dom_result = await _dom_login(page, context, base_url, email, password, timeout_ms)
                 if not dom_result:
                     await browser.close()
@@ -110,7 +119,7 @@ async def login_via_browser(
                 user_id = dom_result.get("user_id", "")
                 username = dom_result.get("username", "")
 
-            # Step 5: Collect final cookies (includes session cookies set after login)
+            # Step 5: Collect final cookies
             final_cookies = await context.cookies()
             final_cookie_dict = {c["name"]: c["value"] for c in final_cookies}
             final_csrf = unquote(
@@ -118,7 +127,7 @@ async def login_via_browser(
                 final_cookie_dict.get("xsrf-token") or csrf or ""
             )
 
-            # Step 6: Try to get user info if we don't have it yet
+            # Step 6: Get user info if missing
             if not user_id:
                 try:
                     resp = await context.request.get(
@@ -158,29 +167,32 @@ async def login_via_browser(
 async def _api_login(context, base_url: str, email: str, password: str, csrf: str) -> tuple:
     """
     Try API-based login using the browser context (which has Cloudflare cookies).
+    Tries with AND without CSRF token.
     Returns (success: bool, user_id: str, username: str)
     """
     endpoints = [
         ("/api/v2/users/login", {"login": email, "password": password}),
         ("/api/v2/auth/sign_in", {"user": {"login": email, "password": password}}),
         ("/api/v2/sessions", {"login": email, "password": password, "grant_type": "password"}),
+        ("/api/v2/tokens", {"grant_type": "password", "username": email, "password": password}),
     ]
 
-    headers = {
+    base_headers = {
         "Accept": "application/json",
         "Content-Type": "application/json",
-        "X-CSRF-Token": csrf,
         "X-App-Version": "web",
         "Origin": base_url,
         "Referer": f"{base_url}/login",
     }
+    if csrf:
+        base_headers["X-CSRF-Token"] = csrf
 
     for path, payload in endpoints:
         try:
             resp = await context.request.post(
                 f"{base_url}{path}",
                 data=json.dumps(payload),
-                headers=headers,
+                headers=base_headers,
                 timeout=15_000,
             )
             status = resp.status
@@ -199,8 +211,8 @@ async def _api_login(context, base_url: str, email: str, password: str, csrf: st
                     logger.debug(f"API login {path} parse error: {e}")
 
             elif status in (401, 403, 422):
-                logger.warning(f"API login {path}: credentials rejected (HTTP {status})")
-                # Credentials wrong — no point trying DOM
+                logger.warning(f"API login {path}: identifiants refusés (HTTP {status})")
+                # Wrong credentials — don't bother with DOM either
                 return False, "", ""
 
         except Exception as e:
@@ -212,25 +224,27 @@ async def _api_login(context, base_url: str, email: str, password: str, csrf: st
 async def _dom_login(page, context, base_url: str, email: str, password: str, timeout_ms: int) -> Optional[dict]:
     """
     Log in by interacting with the Vinted login page DOM.
-    React SPA compatible: uses type() with delays and dispatches synthetic events.
+    Logs all inputs found for debugging, uses type-based fallback selection.
     """
+    # Known selectors (tried in order)
     email_selectors = [
         'input[data-testid="username"]',
-        'input[name="username"]',
-        'input[id="username"]',
-        'input[name="user[login]"]',
+        'input[data-testid="Username"]',
         'input[data-testid="login-form-username"]',
+        'input[name="username"]',
+        'input[name="user[login]"]',
+        'input[id="username"]',
         'input[autocomplete="username"]',
         'input[autocomplete="email"]',
         'input[type="email"]',
-        '[class*="login"] input[type="text"]',
     ]
     password_selectors = [
         'input[data-testid="password"]',
-        'input[name="password"]',
-        'input[id="password"]',
-        'input[name="user[password]"]',
+        'input[data-testid="Password"]',
         'input[data-testid="login-form-password"]',
+        'input[name="password"]',
+        'input[name="user[password]"]',
+        'input[id="password"]',
         'input[autocomplete="current-password"]',
         'input[type="password"]',
     ]
@@ -239,13 +253,10 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
         'button[data-testid="login-submit"]',
         'button[data-testid="login-form-submit"]',
         'button[type="submit"]',
-        'button:text("Connexion")',
-        'button:text("Se connecter")',
     ]
     consent_selectors = [
         'button#onetrust-accept-btn-handler',
         'button[data-testid="accept-all-cookies"]',
-        'button[id*="accept"][id*="cookie"]',
     ]
 
     async def dismiss_consent():
@@ -255,60 +266,103 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
                 if await el.count() > 0:
                     await el.click(timeout=3000)
                     await asyncio.sleep(0.5)
-                    logger.debug(f"Consent dismissed via {sel}")
+                    logger.debug(f"Cookie consent dismissed via {sel}")
                     break
             except Exception:
                 pass
 
-    async def wait_and_fill(selector: str, value: str, field_name: str) -> bool:
-        """Wait for a field, then fill it using React-compatible typing."""
+    async def log_all_inputs():
+        """Log all inputs on the page to help debug selector issues."""
         try:
-            el = page.locator(selector).first
-            count = await el.count()
-            if not count:
-                return False
+            count = await page.locator('input').count()
+            logger.info(f"DEBUG: {count} inputs found on page (url={page.url})")
+            for i in range(min(count, 12)):
+                try:
+                    info = await page.locator('input').nth(i).evaluate("""(e) => ({
+                        type: e.type, name: e.name, id: e.id,
+                        placeholder: e.placeholder,
+                        testid: e.getAttribute('data-testid'),
+                        autocomplete: e.autocomplete,
+                        visible: e.offsetParent !== null
+                    })""")
+                    logger.info(
+                        f"  input[{i}]: type={info.get('type')!r} name={info.get('name')!r} "
+                        f"id={info.get('id')!r} placeholder={info.get('placeholder')!r} "
+                        f"testid={info.get('testid')!r} visible={info.get('visible')}"
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            logger.debug(f"log_all_inputs: {e}")
 
-            # Click to focus the element
-            await el.click(timeout=5000)
+    async def fill_input(locator, value: str, field: str) -> bool:
+        """Fill a React input using type() + synthetic events."""
+        try:
+            await locator.scroll_into_view_if_needed()
+            await locator.click(timeout=5000)
             await asyncio.sleep(0.2)
-
-            # Select all existing text and delete it
             await page.keyboard.press("Control+a")
             await asyncio.sleep(0.1)
             await page.keyboard.press("Delete")
             await asyncio.sleep(0.1)
-
-            # Type character by character — triggers React onChange events
-            await el.type(value, delay=40)
-            await asyncio.sleep(0.3)
-
-            # Also dispatch React synthetic events via JavaScript as insurance
-            await page.evaluate(
-                """([sel, val]) => {
-                    const el = document.querySelector(sel);
-                    if (!el) return;
-                    try {
-                        const setter = Object.getOwnPropertyDescriptor(
-                            window.HTMLInputElement.prototype, 'value'
-                        ).set;
-                        setter.call(el, val);
-                        el.dispatchEvent(new Event('input', {bubbles: true}));
-                        el.dispatchEvent(new Event('change', {bubbles: true}));
-                        el.dispatchEvent(new KeyboardEvent('keyup', {bubbles: true}));
-                    } catch(e) {}
-                }""",
-                [selector, value],
-            )
-
-            logger.info(f"{field_name} filled via {selector}")
+            await locator.type(value, delay=40)
+            await asyncio.sleep(0.2)
+            # Dispatch React synthetic events
+            try:
+                await locator.evaluate("""(el, val) => {
+                    const setter = Object.getOwnPropertyDescriptor(
+                        window.HTMLInputElement.prototype, 'value').set;
+                    setter.call(el, val);
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                }""", value)
+            except Exception:
+                pass
+            logger.info(f"{field} filled")
             return True
         except Exception as e:
-            logger.debug(f"wait_and_fill({selector}): {e}")
+            logger.debug(f"fill_input({field}): {e}")
             return False
+
+    async def find_input_by_selectors(selectors: list) -> Optional[object]:
+        """Try selectors in order, return first matching locator."""
+        for sel in selectors:
+            try:
+                loc = page.locator(sel).first
+                if await loc.count() > 0 and await loc.is_visible():
+                    return loc
+            except Exception:
+                pass
+        return None
+
+    async def find_input_by_type(input_type: str) -> Optional[object]:
+        """Fallback: find any visible input of the given type."""
+        try:
+            loc = page.locator(f'input[type="{input_type}"]').first
+            if await loc.count() > 0:
+                return loc
+        except Exception:
+            pass
+        return None
+
+    async def find_first_text_input() -> Optional[object]:
+        """Fallback: find first visible text-like input (not password/hidden)."""
+        try:
+            inputs = page.locator('input:not([type="hidden"]):not([type="password"]):not([type="checkbox"]):not([type="radio"]):not([type="submit"])')
+            for i in range(await inputs.count()):
+                el = inputs.nth(i)
+                try:
+                    if await el.is_visible():
+                        return el
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return None
 
     try:
         # Try two login URLs
-        email_filled = False
+        email_found = False
         for url in [f"{base_url}/login", f"{base_url}/member/login_form"]:
             try:
                 await page.goto(url, wait_until="networkidle", timeout=30_000)
@@ -319,50 +373,50 @@ async def _dom_login(page, context, base_url: str, email: str, password: str, ti
                     logger.debug(f"goto {url}: {e}")
                     continue
 
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
             await dismiss_consent()
             await asyncio.sleep(1)
 
-            # Wait up to 10s for any email selector
-            for sel in email_selectors:
-                try:
-                    await page.wait_for_selector(sel, timeout=5000)
-                    logger.info(f"Email field found: {sel}")
-                    if await wait_and_fill(sel, email, "Email"):
-                        email_filled = True
-                        break
-                except Exception:
-                    pass
+            # Log all inputs for debugging
+            await log_all_inputs()
 
-            if email_filled:
-                break
+            # Try known selectors first
+            email_loc = await find_input_by_selectors(email_selectors)
 
-        if not email_filled:
+            # Fallback: find by type
+            if not email_loc:
+                logger.info("Known selectors failed — trying type-based fallback")
+                email_loc = await find_input_by_type("email") or await find_first_text_input()
+
+            if email_loc:
+                if await fill_input(email_loc, email, "Email"):
+                    email_found = True
+                    break
+            else:
+                logger.warning(f"No email input found at {url}")
+
+        if not email_found:
             logger.error("Email field not found or could not be filled on any login URL")
             return None
 
         await asyncio.sleep(0.5)
 
         # Fill password
-        password_filled = False
-        for sel in password_selectors:
-            try:
-                if await page.locator(sel).count() > 0:
-                    if await wait_and_fill(sel, password, "Password"):
-                        password_filled = True
-                        break
-            except Exception:
-                pass
+        password_loc = await find_input_by_selectors(password_selectors)
+        if not password_loc:
+            password_loc = await find_input_by_type("password")
 
-        if not password_filled:
-            logger.warning("Password field not found — trying keyboard Tab")
+        if password_loc:
+            await fill_input(password_loc, password, "Password")
+        else:
+            logger.warning("Password field not found — Tab + type fallback")
             await page.keyboard.press("Tab")
             await asyncio.sleep(0.3)
             await page.keyboard.type(password, delay=40)
 
         await asyncio.sleep(0.5)
 
-        # Submit the form
+        # Submit
         submitted = False
         for sel in submit_selectors:
             try:
