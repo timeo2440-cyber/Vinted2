@@ -38,10 +38,11 @@ const accountsView = (() => {
       });
       el.addEventListener('click', e => {
         const { action, id } = el.dataset;
-        if (action === 'delete')   _deleteAccount(+id);
-        if (action === 'relogin')  _reloginAccount(+id);
-        if (action === 'edit')     _openEditModal(+id);
-        if (action === 'verify')   _verifyAccount(+id, el);
+        if (action === 'delete')    _deleteAccount(+id);
+        if (action === 'relogin')   _reloginAccount(+id);
+        if (action === 'edit')      _openEditModal(+id);
+        if (action === 'verify')    _verifyAccount(+id, el);
+        if (action === 'bookmark')  _openBookmarkModal(+id);
       });
     });
   }
@@ -80,6 +81,7 @@ const accountsView = (() => {
           <input type="checkbox" data-action="toggle" data-id="${a.id}" ${a.is_active ? 'checked' : ''}>
           <span class="slider"></span>
         </label>
+        <button class="btn-ghost btn-xs" data-action="bookmark" data-id="${a.id}" title="Synchronisation 1-clic">🔗</button>
         <button class="btn-ghost btn-xs" data-action="relogin" data-id="${a.id}" title="Re-connecter">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         </button>
@@ -330,6 +332,52 @@ const accountsView = (() => {
         toast.show('Reconnecté : ' + (result.vinted_username || result.email), 'success');
       }
       await reload();
+    } catch (e) {
+      toast.show('Erreur : ' + e.message, 'error');
+    }
+  }
+
+  async function _openBookmarkModal(id) {
+    const a = _accounts.find(x => x.id === id);
+    if (!a) return;
+
+    try {
+      const { sync_token } = await api.getSyncToken(id);
+      const botUrl = window.location.origin;
+      const endpoint = `${botUrl}/api/accounts/sync/${sync_token}`;
+
+      const bookmarklet = `javascript:(function(){` +
+        `fetch('${endpoint}',{` +
+        `method:'POST',` +
+        `headers:{'Content-Type':'application/json'},` +
+        `body:JSON.stringify({cookies:document.cookie})` +
+        `}).then(r=>r.json()).then(d=>alert(d.ok?'✅ Compte synchronisé\\n'+d.username:'❌ Erreur')).catch(()=>alert('❌ Erreur de connexion au bot'));` +
+        `})();`;
+
+      const body = document.createElement('div');
+      body.innerHTML = `
+        <p style="margin-bottom:12px">Pour synchroniser automatiquement les cookies depuis Vinted :</p>
+        <ol style="margin:0 0 16px 20px;line-height:1.8">
+          <li>Fais glisser ce bouton vers ta <strong>barre de favoris</strong> :</li>
+        </ol>
+        <div style="text-align:center;margin-bottom:16px">
+          <a href="${bookmarklet.replace(/"/g, '&quot;')}"
+             style="display:inline-block;padding:10px 20px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:600;cursor:grab"
+             onclick="event.preventDefault();alert('Glisse ce bouton vers ta barre de favoris')"
+          >🔗 Sync ${_esc(a.email)}</a>
+        </div>
+        <ol start="2" style="margin:0 0 16px 20px;line-height:1.8">
+          <li>Va sur <strong>vinted.fr</strong> et connecte-toi</li>
+          <li>Clique le favori — les cookies sont envoyés automatiquement</li>
+          <li>Le compte passe à "Connecté" en quelques secondes</li>
+        </ol>
+        <p class="help-text">À refaire seulement si le compte passe à "Expiré".</p>
+        <div class="form-footer">
+          <button class="btn-primary" id="bm-close">Fermer</button>
+        </div>`;
+
+      modal.open('Synchronisation 1-clic — ' + _esc(a.email), body);
+      document.getElementById('bm-close').onclick = () => modal.close();
     } catch (e) {
       toast.show('Erreur : ' + e.message, 'error');
     }

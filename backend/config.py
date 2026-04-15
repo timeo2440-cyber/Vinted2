@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     stripe_secret_key: str = ""
     stripe_publishable_key: str = ""
     stripe_webhook_secret: str = ""
+    # Proxy résidentiel pour contourner le blocage Vinted sur les IPs datacenter
+    # Format: http://user:pass@host:port ou socks5://user:pass@host:port
+    vinted_proxy_url: str = ""
     # PORT is set automatically by Railway/Render/Fly.io
     port: int = int(os.environ.get("PORT", 8000))
 

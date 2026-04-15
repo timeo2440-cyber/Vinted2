@@ -84,6 +84,7 @@ const api = (() => {
     reloginAccount:      (id)            => request('POST',   `/api/accounts/${id}/login`),
     setAccountCookies:   (id, cookies)   => request('POST',   `/api/accounts/${id}/cookies`, { cookies }),
     checkAccountStatus:  (id)            => request('GET',    `/api/accounts/${id}/status`),
+    getSyncToken:        (id)            => request('GET',    `/api/accounts/${id}/sync-token`),
 
     // Admin
     adminGetUsers:      ()          => request('GET',    '/api/admin/users'),

@@ -28,9 +28,17 @@ async def fetch_cookies_via_browser(
 
     logger.info("Browser auth: launching Chromium to bypass Cloudflare…")
     try:
+        from config import settings as _s
+        _proxy_url = _s.vinted_proxy_url
+    except Exception:
+        _proxy_url = ""
+    proxy_cfg = {"server": _proxy_url} if _proxy_url else None
+
+    try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
+                proxy=proxy_cfg,
                 args=[
                     "--no-sandbox",
                     "--disable-setuid-sandbox",

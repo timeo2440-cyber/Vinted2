@@ -1,8 +1,10 @@
 import json
 import base64
+import secrets
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import APIRouter, Request, HTTPException, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from database import AsyncSessionLocal, Account, User
@@ -228,6 +230,64 @@ async def set_account_cookies(account_id: int, body: CookiesBody, request: Reque
     result = _serialize(account)
     result["validation_reason"] = "trusted"
     return result
+
+
+@router.get("/{account_id}/sync-token")
+async def get_sync_token(account_id: int, user: User = Depends(get_current_user)):
+    """Retourne le token de synchronisation pour le bookmarklet."""
+    async with AsyncSessionLocal() as db:
+        account = await db.get(Account, account_id)
+        if not account or account.user_id != user.id:
+            raise HTTPException(404, "Compte introuvable")
+        if not account.sync_token:
+            account.sync_token = secrets.token_urlsafe(32)
+            await db.commit()
+        return {"sync_token": account.sync_token, "account_id": account_id}
+
+
+@router.post("/sync/{sync_token}")
+async def sync_cookies_via_token(sync_token: str, body: CookiesBody, request: Request):
+    """
+    Endpoint public (appelé par le bookmarklet depuis vinted.fr).
+    CORS autorisé pour permettre les appels cross-origin.
+    """
+    from urllib.parse import unquote as _unquote
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(Account).where(Account.sync_token == sync_token))
+        account = result.scalar_one_or_none()
+        if not account:
+            raise HTTPException(404, "Token invalide")
+
+        cookies = parse_cookie_string(body.cookies)
+        if not cookies:
+            raise HTTPException(400, "Cookies invalides")
+
+        csrf = _unquote(cookies.get("XSRF-TOKEN") or cookies.get("xsrf-token") or "")
+        account.cookies = json.dumps(cookies)
+        account.csrf_token = csrf or ""
+        account.is_authenticated = True
+        account.last_login = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(account)
+
+    mgr = getattr(request.app.state, "account_manager", None)
+    if mgr:
+        import asyncio
+        asyncio.create_task(mgr.refresh_account(account.id))
+
+    resp = JSONResponse({"ok": True, "username": account.vinted_username or account.email})
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
+
+
+@router.options("/sync/{sync_token}")
+async def sync_cookies_options(sync_token: str):
+    """CORS preflight pour le bookmarklet."""
+    resp = JSONResponse({})
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return resp
 
 
 @router.get("/{account_id}/status")

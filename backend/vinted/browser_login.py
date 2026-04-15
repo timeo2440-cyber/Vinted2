@@ -33,10 +33,21 @@ async def login_via_browser(
 
     logger.info(f"Browser login: connecting as {email}…")
 
+    # Proxy résidentiel pour contourner le blocage Vinted sur les IPs datacenter
+    try:
+        from config import settings as _s
+        _proxy_url = _s.vinted_proxy_url
+    except Exception:
+        _proxy_url = ""
+    proxy_cfg = {"server": _proxy_url} if _proxy_url else None
+    if proxy_cfg:
+        logger.info(f"Browser login: using proxy {_proxy_url.split('@')[-1]}")
+
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
+                proxy=proxy_cfg,
                 args=[
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
