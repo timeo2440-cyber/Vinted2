@@ -21,6 +21,9 @@ class AccountManager:
         self.base_url = base_url
         # account_id → {"client": VintedClient, "user_id": int}
         self._clients: dict[int, dict] = {}
+        # Rate-limit: track last login attempt per account to avoid loops
+        self._last_login_attempt: dict[int, float] = {}
+        self._login_cooldown_s: int = 300  # 5 minutes entre tentatives
 
     async def initialize(self) -> None:
         """Load all active accounts, auto-login those missing cookies."""
@@ -43,6 +46,14 @@ class AccountManager:
 
     async def _auto_login_and_load(self, account) -> bool:
         """Login via Playwright browser and store cookies in DB."""
+        import time
+        # Rate-limit: skip if last attempt was less than 5 minutes ago
+        last = self._last_login_attempt.get(account.id, 0)
+        if time.time() - last < self._login_cooldown_s:
+            logger.info(f"Account {account.email}: login cooldown actif, skip")
+            return False
+        self._last_login_attempt[account.id] = time.time()
+
         try:
             password = base64.b64decode(account.password_enc.encode()).decode()
         except Exception:
