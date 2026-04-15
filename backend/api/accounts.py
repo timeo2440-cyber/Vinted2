@@ -141,7 +141,8 @@ async def update_account(account_id: int, body: AccountUpdate, request: Request,
 
         mgr = getattr(request.app.state, "account_manager", None)
         if mgr:
-            await mgr.refresh_account(account_id)
+            import asyncio
+            asyncio.create_task(mgr.refresh_account(account_id))
         return _serialize(account)
 
 
